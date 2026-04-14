@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Istanda Mapasnava</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans TC', sans-serif; background: #fff; color: #1a1a1a; }
+
+    .hero {
+      background: #1a1a1a;
+      min-height: 100vw;
+      max-height: 380px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .hero svg { position: absolute; bottom: 0; width: 100%; }
+    .hero-sub { font-size: 11px; letter-spacing: 3px; color: #c8a96e; margin-bottom: 8px; position: relative; z-index: 1; }
+    .hero-title { font-size: 36px; font-weight: 700; color: #fff; line-height: 1.2; position: relative; z-index: 1; }
+    .hero-title span { font-style: italic; color: #c8a96e; }
+    .hero-desc { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 8px; letter-spacing: 1px; position: relative; z-index: 1; }
+
+    .stats { display: flex; background: #1a1a1a; border-top: 0.5px solid rgba(255,255,255,0.1); }
+    .stat { flex: 1; text-align: center; padding: 12px 0; border-right: 0.5px solid rgba(255,255,255,0.1); }
+    .stat:last-child { border-right: none; }
+    .stat-num { font-size: 20px; font-weight: 700; color: #c8a96e; }
+    .stat-label { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+
+    .start-btn {
+      display: block; margin: 16px; background: #1a1a1a; color: #c8a96e;
+      border: none; border-radius: 30px; padding: 14px; font-size: 15px;
+      font-weight: 600; text-align: center; width: calc(100% - 32px); cursor: pointer;
+      letter-spacing: 1px;
+    }
+
+    .section { padding: 20px 16px 0; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .section-title { font-size: 15px; font-weight: 600; }
+    .section-more { font-size: 12px; color: #c8a96e; }
+    .new-badge { background: #c8a96e; color: #fff; font-size: 9px; padding: 2px 6px; border-radius: 20px; margin-left: 6px; }
+
+    .elder-scroll { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+    .elder-scroll::-webkit-scrollbar { display: none; }
+    .elder-card { min-width: 100px; background: #f8f6f2; border-radius: 14px; border: 0.5px solid #e8e0d0; padding: 14px 10px; text-align: center; flex-shrink: 0; }
+    .elder-avatar { width: 46px; height: 46px; border-radius: 50%; margin: 0 auto 8px; background: #e8dcc8; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #7a5c30; }
+    .elder-name { font-size: 13px; font-weight: 600; }
+    .elder-sub { font-size: 10px; color: #999; margin-top: 2px; }
+    .elder-count { display: inline-block; margin-top: 6px; background: #f5ede0; color: #a07840; font-size: 10px; padding: 2px 8px; border-radius: 20px; }
+
+    .feed { padding: 0 16px; margin-top: 20px; padding-bottom: 80px; }
+    .feed-item { display: flex; gap: 12px; padding: 14px 0; border-bottom: 0.5px solid #f0ece6; }
+    .feed-avatar { width: 38px; height: 38px; border-radius: 50%; background: #e8dcc8; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #7a5c30; flex-shrink: 0; }
+    .feed-name { font-size: 13px; font-weight: 600; }
+    .feed-text { font-size: 12px; color: #666; margin-top: 3px; line-height: 1.5; }
+    .feed-lang { font-style: italic; color: #a07840; }
+    .play-btn { display: inline-flex; align-items: center; gap: 6px; background: #1a1a1a; color: #fff; border: none; border-radius: 20px; padding: 5px 12px; font-size: 11px; cursor: pointer; margin-top: 6px; }
+    .play-arrow { width: 0; height: 0; border-style: solid; border-width: 4px 0 4px 7px; border-color: transparent transparent transparent #fff; }
+    .feed-actions { display: flex; gap: 14px; margin-top: 8px; }
+    .feed-btn { font-size: 12px; color: #999; background: none; border: none; cursor: pointer; padding: 0; }
+    .feed-btn.liked { color: #c8a96e; }
+    .feed-time { font-size: 10px; color: #bbb; margin-top: 4px; }
+
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #fff; border-top: 0.5px solid #eee; padding: 10px 0 20px; max-width: 480px; margin: 0 auto; }
+    .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; color: #bbb; }
+    .nav-item.active { color: #1a1a1a; }
+    .nav-icon { font-size: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <svg viewBox="0 0 390 120" preserveAspectRatio="none">
+    <polygon points="0,120 130,40 200,80 280,20 390,120" fill="#2a2a2a"/>
+    <polygon points="0,120 80,60 160,95 230,45 310,75 390,50 390,120" fill="#333"/>
+    <circle cx="320" cy="35" r="14" fill="none" stroke="#c8a96e" stroke-width="1" opacity="0.5"/>
+    <line x1="320" y1="15" x2="320" y2="10" stroke="#c8a96e" stroke-width="1" opacity="0.5"/>
+    <line x1="320" y1="55" x2="320" y2="60" stroke="#c8a96e" stroke-width="1" opacity="0.5"/>
+    <line x1="300" y1="35" x2="295" y2="35" stroke="#c8a96e" stroke-width="1" opacity="0.5"/>
+    <line x1="340" y1="35" x2="345" y2="35" stroke="#c8a96e" stroke-width="1" opacity="0.5"/>
+  </svg>
+  <div class="hero-sub">ISBUKUN BUNUN · 郡群布農語</div>
+  <div class="hero-title">Istanda<br><span>Mapasnava</span></div>
+  <div class="hero-desc">家族語言 · 世代傳承</div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num" id="memberCount">0</div><div class="stat-label">成員</div></div>
+  <div class="stat"><div class="stat-num" id="wordCount">0</div><div class="stat-label">收錄詞彙</div></div>
+  <div class="stat"><div class="stat-num" id="recordCount">0</div><div class="stat-label">長輩錄音</div></div>
+</div>
+
+<button class="start-btn">開始 Mahtu</button>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">家人的聲音 <span class="new-badge">NEW</span></span>
+    <span class="section-more">全部</span>
+  </div>
+  <div class="elder-scroll" id="elderList">
+    <div class="elder-card">
+      <div class="elder-avatar">CU</div>
+      <div class="elder-name">Cina Umav</div>
+      <div class="elder-sub">媽媽</div>
+      <div class="elder-count">0 則</div>
+    </div>
+    <div class="elder-card">
+      <div class="elder-avatar">TI</div>
+      <div class="elder-name">Tama Iman</div>
+      <div class="elder-sub">爸爸</div>
+      <div class="elder-count">0 則</div>
+    </div>
+    <div class="elder-card" style="border:0.5px dashed #ccc;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+      <div style="font-size:24px;color:#ccc;">+</div>
+      <div style="font-size:11px;color:#ccc;">邀請家人</div>
+    </div>
+  </div>
+</div>
+
+<div class="feed">
+  <div class="section-header">
+    <span class="section-title">最新動態</span>
+    <span class="section-more">全部</span>
+  </div>
+  <div id="feedList">
+    <div class="feed-item">
+      <div class="feed-avatar">CU</div>
+      <div>
+        <div class="feed-name">Cina Umav</div>
+        <div class="feed-text">新增了一段對孩子的勉勵 — <span class="feed-lang">「Madadaingaz tu bunun...」</span></div>
+        <button class="play-btn"><span class="play-arrow"></span> 播放錄音</button>
+        <div class="feed-actions">
+          <button class="feed-btn liked">♥ 23</button>
+          <button class="feed-btn">💬 5 則</button>
+          <button class="feed-btn">↗ 分享</button>
+        </div>
+        <div class="feed-time">2 小時前</div>
+      </div>
+    </div>
+    <div class="feed-item">
+      <div class="feed-avatar">TI</div>
+      <div>
+        <div class="feed-name">Tama Iman</div>
+        <div class="feed-text">錄了一段生活族語 — 早安、晚安怎麼說</div>
+        <button class="play-btn"><span class="play-arrow"></span> 播放錄音</button>
+        <div class="feed-actions">
+          <button class="feed-btn">♥ 14</button>
+          <button class="feed-btn">💬 2 則</button>
+          <button class="feed-btn">↗ 分享</button>
+        </div>
+        <div class="feed-time">昨天</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-nav">
+  <div class="nav-item active"><span class="nav-icon">🏠</span>首頁</div>
+  <div class="nav-item"><span class="nav-icon">📖</span>族語本</div>
+  <div class="nav-item"><span class="nav-icon">👨‍👩‍👧‍👦</span>成員</div>
+  <div class="nav-item"><span class="nav-icon">🎙</span>錄音</div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
+    authDomain: "istanda-mapasnava.firebaseapp.com",
+    projectId: "istanda-mapasnava",
+    storageBucket: "istanda-mapasnava.firebasestorage.app",
+    messagingSenderId: "924639525790",
+    appId: "1:924639525790:web:9e5b1e8e2674620c71748f",
+    measurementId: "G-WSST40SJF3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // 之後從 Firebase 讀取真實數據
+  document.getElementById('memberCount').textContent = '87';
+  document.getElementById('wordCount').textContent = '142';
+  document.getElementById('recordCount').textContent = '38';
+</script>
+
+</body>
+</html>
