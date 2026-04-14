@@ -91,7 +91,7 @@
 </div>
 
 <div class="stats">
-  <div class="stat"><div class="stat-num" id="memberCount">0</div><div class="stat-label">成員</div></div>
+  <div class="stat"><div class="stat-num" id="memberCount">—</div><div class="stat-label">成員</div></div>
   <div class="stat"><div class="stat-num" id="wordCount">0</div><div class="stat-label">收錄詞彙</div></div>
   <div class="stat"><div class="stat-num" id="recordCount">0</div><div class="stat-label">長輩錄音</div></div>
 </div>
@@ -104,22 +104,7 @@
     <span class="section-more">全部</span>
   </div>
   <div class="elder-scroll" id="elderList">
-    <div class="elder-card">
-      <div class="elder-avatar">CU</div>
-      <div class="elder-name">Cina Umav</div>
-      <div class="elder-sub">媽媽</div>
-      <div class="elder-count">0 則</div>
-    </div>
-    <div class="elder-card">
-      <div class="elder-avatar">TI</div>
-      <div class="elder-name">Tama Iman</div>
-      <div class="elder-sub">爸爸</div>
-      <div class="elder-count">0 則</div>
-    </div>
-    <div class="elder-card" style="border:0.5px dashed #ccc;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
-      <div style="font-size:24px;color:#ccc;">+</div>
-      <div style="font-size:11px;color:#ccc;">邀請家人</div>
-    </div>
+    <div style="font-size:12px;color:#bbb;padding:20px;">載入中...</div>
   </div>
 </div>
 
@@ -169,7 +154,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+  import { getFirestore, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -184,10 +169,40 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // 之後從 Firebase 讀取真實數據
-  document.getElementById('memberCount').textContent = '87';
-  document.getElementById('wordCount').textContent = '142';
-  document.getElementById('recordCount').textContent = '38';
+  try {
+    const snapshot = await getDocs(collection(db, 'members'));
+    
+    // 更新成員數量
+    document.getElementById('memberCount').textContent = snapshot.size;
+
+    // 更新家人卡片
+    const elderList = document.getElementById('elderList');
+    elderList.innerHTML = '';
+
+    snapshot.forEach(doc => {
+      const m = doc.data();
+      elderList.innerHTML += `
+        <div class="elder-card">
+          <div class="elder-avatar">${m.initials || '??'}</div>
+          <div class="elder-name">${m.name || ''}</div>
+          <div class="elder-sub">${m.nickname || ''}</div>
+          <div class="elder-count">${m.recordCount || 0} 則</div>
+        </div>
+      `;
+    });
+
+    // 加入邀請按鈕
+    elderList.innerHTML += `
+      <div class="elder-card" style="border:0.5px dashed #ccc;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:100px;">
+        <div style="font-size:24px;color:#ccc;">+</div>
+        <div style="font-size:11px;color:#ccc;">邀請家人</div>
+      </div>
+    `;
+
+  } catch (e) {
+    console.error('Firebase 讀取失敗:', e);
+    document.getElementById('memberCount').textContent = '0';
+  }
 </script>
 
 </body>
