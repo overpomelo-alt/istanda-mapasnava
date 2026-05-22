@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#141414" />
+  <title>個人頁面 · Istanda Mapasnava</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ============================================================
+       MEMBER PAGE · Hero / 錄音區 placeholder / 清單 placeholder
+       全部走 :root 的 CSS 變數,漸層只用「限動五色」+「強調動作」兩條
+       ============================================================ */
+
+    /* ===== 「← 回首頁」icon button (對齊 .icon-btn 風格) ===== */
+    .back-btn {
+      width: 40px; height: 40px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 50%;
+      color: var(--text);
+      transition: background 0.15s, transform 0.15s;
+    }
+    .back-btn:hover { background: var(--bg-soft); }
+    .back-btn:active { transform: scale(0.92); }
+    .back-btn svg { width: 24px; height: 24px; }
+
+    .app-header__title-mid {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      max-width: 60%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .app-header__spacer { width: 40px; flex-shrink: 0; }
+
+    /* ===== Hero 區 ===== */
+    .member-hero {
+      background: var(--bg-soft);
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 24px 16px 20px;
+      display: flex; align-items: center; gap: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* 限動五色漸層 ring,沿用 .story__ring 邏輯但放大到 hero 等級 */
+    .member-hero__ring {
+      width: 82px; height: 82px;
+      border-radius: 50%;
+      padding: 3px;
+      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      flex-shrink: 0;
+    }
+    .member-hero__ring-inner {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      padding: 2px;
+      background: var(--bg);
+    }
+    .member-hero__avatar {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
+      letter-spacing: 0.02em;
+    }
+
+    .member-hero__text { flex: 1; min-width: 0; }
+    .member-hero__name {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      margin-bottom: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .member-hero__nick {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .member-hero__count {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* ===== 錄音區 placeholder (Step 3 才開放) ===== */
+    .record-section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 32px 16px 24px;
+      text-align: center;
+    }
+    .section-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--text);
+      margin-bottom: 20px;
+      letter-spacing: 0.01em;
+    }
+    .record-placeholder {
+      width: 100px; height: 100px;
+      margin: 0 auto;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f09433, #dc2743);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0.4;
+    }
+    .record-placeholder svg {
+      width: 40px; height: 40px;
+      color: #fff;
+    }
+    .record-placeholder__hint {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ===== 過去錄音清單 placeholder (Step 4 才實作) ===== */
+    .recordings-section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .recordings-empty {
+      text-align: center;
+      padding: 24px 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ===== 友善錯誤畫面 ===== */
+    .error-screen {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px;
+      background: var(--bg);
+      color: var(--text-muted);
+      text-align: center;
+      gap: 12px;
+    }
+    .error-screen__icon { font-size: 48px; line-height: 1; opacity: 0.6; }
+    .error-screen__title {
+      font-size: 18px; font-weight: 600;
+      color: var(--text);
+    }
+    .error-screen__msg {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 280px;
+      line-height: 1.6;
+    }
+    .error-screen__home {
+      margin-top: 12px;
+      padding: 10px 20px;
+      border-radius: 22px;
+      background: var(--bg-elevated);
+      color: var(--text);
+      font-size: 13px;
+      text-decoration: none;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .error-screen__home:active { transform: scale(0.96); }
+
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- ============ MAIN APP CONTENT ============ -->
+  <div id="appContent">
+
+    <!-- Sticky header:← / 族名 / spacer -->
+    <header class="app-header">
+      <div class="app-header__inner">
+        <button class="back-btn" aria-label="回首頁" id="backBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/>
+            <polyline points="12 19 5 12 12 5"/>
+          </svg>
+        </button>
+        <div class="app-header__title-mid" id="headerTitle">成員頁面</div>
+        <div class="app-header__spacer"></div>
+      </div>
+    </header>
+
+    <main class="app-main">
+
+      <!-- Hero -->
+      <section class="member-hero">
+        <div class="member-hero__ring">
+          <div class="member-hero__ring-inner">
+            <div class="member-hero__avatar" id="heroAvatar">--</div>
+          </div>
+        </div>
+        <div class="member-hero__text">
+          <div class="member-hero__name" id="heroName">載入中…</div>
+          <div class="member-hero__nick" id="heroNick"></div>
+          <div class="member-hero__count" id="heroCount">0 則錄音</div>
+        </div>
+      </section>
+
+      <!-- 錄音區 placeholder (Step 3 才開放) -->
+      <section class="record-section">
+        <div class="section-title">🎙 錄一段話</div>
+        <div class="record-placeholder" aria-label="錄音功能開發中">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="2" width="6" height="12" rx="3"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+        </div>
+        <div class="record-placeholder__hint">錄音功能開發中 (Step 3)</div>
+      </section>
+
+      <!-- 過去錄音清單 placeholder (Step 4 才實作) -->
+      <section class="recordings-section">
+        <div class="section-title">過去錄音</div>
+        <div class="recordings-empty">清單載入中… (Step 4)</div>
+      </section>
+
+    </main>
+
+    <!-- 底部 nav:錄音 tab active -->
+    <nav class="bottom-nav">
+      <a class="nav-btn" href="index.html" aria-label="首頁">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+      </a>
+      <button class="nav-btn" aria-label="搜尋">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <button class="nav-btn nav-btn--record nav-btn--active" aria-label="錄音記事">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </button>
+      <button class="nav-btn" aria-label="家族成員">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </button>
+      <button class="nav-btn" aria-label="我">
+        <div class="nav-avatar">ME</div>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ============ 友善錯誤畫面 (預設藏起來) ============ -->
+  <div id="errorScreen" class="error-screen" hidden>
+    <div class="error-screen__icon">🤔</div>
+    <div class="error-screen__title" id="errorTitle">找不到這位成員</div>
+    <div class="error-screen__msg" id="errorMsg">這個連結可能壞掉了,回首頁挑一位試試。</div>
+    <a class="error-screen__home" href="index.html">← 回首頁</a>
+  </div>
+
+  <!-- ============ 全域 Toast (複用 style.css 的 .global-toast) ============ -->
+  <div id="globalToast" class="global-toast"></div>
+
+  <!-- ============ Firebase + 應用邏輯 ============ -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
+      authDomain: "istanda-mapasnava.firebaseapp.com",
+      projectId: "istanda-mapasnava",
+      storageBucket: "istanda-mapasnava.firebasestorage.app",
+      messagingSenderId: "924639525790",
+      appId: "1:924639525790:web:9e5b1e8e2674620c71748f",
+      measurementId: "G-WSST40SJF3"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    function showError(title, msg) {
+      document.getElementById("appContent").hidden = true;
+      if (title) document.getElementById("errorTitle").textContent = title;
+      if (msg) document.getElementById("errorMsg").textContent = msg;
+      document.getElementById("errorScreen").hidden = false;
+    }
+
+    document.getElementById("backBtn").addEventListener("click", () => {
+      if (window.history.length > 1) window.history.back();
+      else window.location.href = "index.html";
+    });
+
+    function renderHero(m) {
+      const fallbackInitials = (m.name || "?").slice(0, 2).toUpperCase();
+      document.getElementById("heroAvatar").textContent = m.initials || fallbackInitials;
+      document.getElementById("heroName").textContent = m.name || "(無族名)";
+      document.getElementById("heroNick").textContent = m.nickname || "";
+      // N 則錄音:Step 4 會改成讀清單長度,Step 2 先寫 0
+      document.getElementById("heroCount").textContent = "0 則錄音";
+      document.getElementById("headerTitle").textContent = m.name || "成員頁面";
+      document.title = `${m.name || "成員"} · Istanda Mapasnava`;
+    }
+
+    async function main() {
+      const memberId = new URLSearchParams(window.location.search).get("id");
+      if (!memberId) {
+        showError("缺少成員 ID", "這個頁面要從首頁點某位家人才會進得來,回首頁挑一位吧。");
+        return;
+      }
+      try {
+        const snap = await getDoc(doc(db, "members", memberId));
+        if (!snap.exists()) {
+          showError("找不到這位成員", "這個連結可能壞掉了,或這位成員還沒建好。回首頁挑一位試試。");
+          return;
+        }
+        renderHero(snap.data());
+      } catch (err) {
+        console.error(err);
+        showError("連線出問題", "讀不到家族資料,請檢查網路後重新整理。");
+      }
+    }
+
+    main();
+  </script>
+
+</body>
+</html>
