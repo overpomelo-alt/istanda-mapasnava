@@ -12,7 +12,7 @@
 
 建立 `member.html`，讓任何家族成員（從首頁卡片點進來）能在自己的頁面：
 1. 看到自己的族名、暱稱、頭像、錄音總數
-2. 點大金色麥克風按鈕錄音（點擊切換、不是按住、60 秒自動停）
+2. 點大橘紅漸層麥克風按鈕錄音（點擊切換、不是按住、60 秒自動停）
 3. 錄完先試聽、可以重錄或上傳
 4. 上傳成功 → 寫進 Drive、寫進 Firestore `recordings`、更新成員的 recordCount
 5. 看到自己所有過去的錄音清單、可逐筆播放
@@ -36,9 +36,42 @@
   - `members`（已有，2 筆 seed：Cina Umav `2l95ZhadEN8Xv8hijWty`、Tama Iman `pFPQxryRyP8cncnvP7h4`）
   - `recordings`（**這個任務要建立**）
 
-### 視覺
-- 風格延續 `index.html`：白底 + 深色 hero + 金色 #c8a96e
-- 字型：-apple-system, BlinkMacSystemFont, 'Noto Sans TC'
+### 視覺（2026-05-22 更新）
+
+**對齊首頁 v0 風格、全深色、不寫死色碼、全部用 CSS 變數。**
+
+樣式來源：`style.css`（已上線於 commit c431e54）
+
+| 用途 | CSS 變數 | 實際值（供參、不要寫死） |
+|---|---|---|
+| 整體背景 | `var(--bg)` | `#141414` |
+| Hero / 卡片背景 | `var(--bg-soft)` | `#1c1c1c` |
+| 高一階區塊 | `var(--bg-elevated)` | `#232323` |
+| 主文字 | `var(--text)` | `#f2f2f2` |
+| 次要文字 | `var(--text-muted)` | `#8a8a8a` |
+| 邊框 | `var(--border)` | `#2e2e2e` |
+| 強調色（badge、按鈕、+） | `var(--accent)` | `#e85a8a` |
+| 圓角 | `var(--radius-sm/md/lg)` | `8/12/16px` |
+| 行動裝置最大寬 | `var(--max-w)` | `512px` |
+| 字型 | `var(--font-sans)` | `'Inter', 'Noto Sans TC', ...` |
+
+**漸層使用規範（沿用首頁的兩條漸層）：**
+- 限動圈漸層（用於 Hero 頭像外環、貼文頭像外環）：
+  ```css
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  ```
+- 錄音 / 強調動作漸層（用於大麥克風按鈕、底部錄音 nav）：
+  ```css
+  background: linear-gradient(135deg, #f09433, #dc2743);
+  ```
+
+**禁止**：不要在 `member.html` 內聯任何寫死色碼（`#c8a96e`、`#e8dcc8`、`#7a5c30` 等舊白底金色風格已淘汰）。所有顏色一律走 `var(--xxx)` 或上述兩條漸層。
+
+**複用既有 class（不要重寫）：**
+- 全域 toast：複用 `.global-toast` / `.global-toast--show`（已存在於 style.css 結尾）
+- 「我是誰」風格的彈出層：之後若需要、複用 `.identity-modal__*`
+
+**字型**：`var(--font-sans)`（已在 style.css :root 定義為 Inter + Noto Sans TC）
 
 ---
 
@@ -65,18 +98,21 @@
 - URL 格式：`member.html?id={memberId}`
 - 沒帶 id → 顯示錯誤、不繼續執行
 - id 撈不到對應成員 → 顯示錯誤
+- **友善錯誤畫面規範**：用一個 class（例如 `.error-screen`）做全螢幕置中區塊、背景 `var(--bg)`、文字 `var(--text-muted)`、含「← 回首頁」連結；**不要用 inline style**、寫進 `style.css`（或 member.html 內的 `<style>` 區塊但用 CSS 變數）以便日後複用
 
 ### 2. Hero 區
-- 背景 #1a1a1a
-- 左上「← 回首頁」按鈕（點了 history.back()）
-- 頭像圓圈（72×72）顯示 initials、背景 #e8dcc8、字色 #7a5c30
-- 族名 22px 白色粗體
-- 暱稱 13px 金色
-- 「N 則錄音」11px 灰白色 ← **N 來自清單長度、不是 recordCount**
+- 背景 `var(--bg-soft)`（與首頁 .app-header 同色階）
+- 上方放一條 sticky header（高度 56px）：左「← 回首頁」（點了 history.back()）、中間放族名小字、右側留白；樣式對齊 `.app-header`（含 backdrop-filter blur）
+- Hero 主體（在 sticky header 下方、約 120px 高）：
+  - 頭像圓圈 **72×72**、外圈包一層**限動漸層 ring**（沿用 `.story__ring` 的 45deg 五色漸層），內圈是 initials 文字
+  - 頭像 initials 內部背景用 `linear-gradient(135deg, #4a4a4a, #6b6b6b)`、字色 `#fff`（對齊首頁 `.story__avatar`）
+  - 族名 **22px 粗體 var(--text)**
+  - 暱稱 **13px var(--text-muted)**
+  - 「N 則錄音」**11px var(--text-muted)** ← **N 來自清單長度、不是 recordCount**
 
 ### 3. 錄音區
 - 標題「🎙 錄一段話」
-- 大圓形麥克風按鈕：100×100、金色 #c8a96e、白色麥克風 emoji
+- 大圓形麥克風按鈕：100×100、背景用「強調動作漸層」`linear-gradient(135deg, #f09433, #dc2743)`、白色麥克風 SVG（不用 emoji、emoji 各平台渲染不一致）
 - **按麥克風前先顯示 toast**：「💡 等等手機會問要不要用麥克風，請按「允許」」
 - 點擊邏輯：
   - 第 1 次點 → 開始錄音、按鈕變紅 #d04848 + pulse 動畫、文字變「⏹」
@@ -87,9 +123,9 @@
 
 ### 4. 試聽區（錄完才出現）
 - 三顆按鈕橫排：
-  - **▶ 試聽**（白底黑字）→ 點了播放、播放中顯示「⏸ 暫停」
-  - **↻ 重錄**（灰）→ 清掉預覽、回到初始狀態
-  - **☁ 上傳**（金色）→ 上傳中顯示「☁ 上傳中...」、按鈕 disabled
+  - **▶ 試聽**（背景 `var(--bg-elevated)`、字色 `var(--text)`）→ 點了播放、播放中顯示「⏸ 暫停」
+  - **↻ 重錄**（背景透明 + `var(--border)` 邊框）→ 清掉預覽、回到初始狀態
+  - **☁ 上傳**（強調動作漸層 `linear-gradient(135deg, #f09433, #dc2743)`、白字）→ 上傳中顯示「☁ 上傳中...」、按鈕 disabled
 - 上傳成功 → 試聽區消失、重新撈清單、上面成員的 recordCount +1
 
 ### 5. 上傳邏輯
@@ -120,7 +156,7 @@
   - 日期 MM/DD HH:MM（從檔名 `_MMDDHHMM` 解析）
   - 「第 N 段錄音」
   - 播放按鈕（黑色圓形）
-- 點播放：用 `GET ?id={fileId}` 拿 base64、解碼後播放、播放中按鈕變金色
+- 點播放:用 `GET ?id={fileId}` 拿 base64、解碼後播放、播放中按鈕改成強調漸層 `linear-gradient(135deg, #f09433, #dc2743)`
 - 點播放中的按鈕 → 暫停
 - **清單長度即「Hero 區的 N 則錄音」**
 
@@ -154,7 +190,7 @@
 ### Step 2：建立 member.html 骨架 + Hero 渲染
 1. 複製 `index.html` 的 firebaseConfig（已驗證一字不差、直接拿）
 2. 寫 Hero + 錄音區（先 placeholder）+ 清單區（先 placeholder）+ 底部 nav 的 HTML
-3. 寫 CSS（沿用 index.html 配色 #1a1a1a / #c8a96e / #e8dcc8 / #7a5c30）
+3. 寫 CSS:**全部用 :root 已定義的 CSS 變數**(`--bg / --bg-soft / --bg-elevated / --text / --text-muted / --accent / --border / --radius-* / --max-w / --font-sans`)、**不要寫死 hex 色碼**。漸層只用上述兩條(限動漸層、強調動作漸層)。複用 `.global-toast` 不要重寫。
 4. 從 URL 撈 `?id=`、撈 Firestore 對應成員、渲染 Hero（族名、暱稱、頭像、N 則錄音先寫 0）
 5. 錯誤處理：沒帶 id / 撈不到 → 友善訊息（不要白屏）
 
@@ -249,4 +285,4 @@
 
 ---
 
-*Last updated: 2026-05-19（補上 Recon 拍板結果、Step 順序細化）*
+*Last updated: 2026-05-22（視覺章節對齊上線首頁 v0 風格、移除舊白底金色配色、改成 CSS 變數 + 兩條漸層）*
