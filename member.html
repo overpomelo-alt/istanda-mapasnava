@@ -37,9 +37,9 @@
     }
     .app-header__spacer { width: 40px; flex-shrink: 0; }
 
-    /* ===== Hero 區(v2:沉黑織片鑲在白頁面)===== */
+    /* ===== Hero 區(v2 翻盤:純白、靠 ring 五色當主視覺、米色細邊分隔下方錄音區)===== */
     .member-hero {
-      background: var(--bg-hero);
+      background: var(--bg-elevated);
       max-width: var(--max-w);
       margin: 0 auto;
       padding: 24px 16px 20px;
@@ -59,7 +59,7 @@
       width: 100%; height: 100%;
       border-radius: 50%;
       padding: 2px;
-      background: var(--bg-hero);
+      background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
     }
     .member-hero__avatar {
       width: 100%; height: 100%;
@@ -75,7 +75,7 @@
     .member-hero__name {
       font-size: 22px;
       font-weight: 700;
-      color: var(--text-on-dark);
+      color: var(--text);
       letter-spacing: -0.01em;
       margin-bottom: 2px;
       overflow: hidden;
@@ -84,12 +84,12 @@
     }
     .member-hero__nick {
       font-size: 13px;
-      color: rgba(244, 241, 234, 0.6);
+      color: var(--text-muted);
       margin-bottom: 6px;
     }
     .member-hero__count {
       font-size: 11px;
-      color: rgba(244, 241, 234, 0.6);
+      color: var(--text-muted);
       letter-spacing: 0.02em;
     }
 
