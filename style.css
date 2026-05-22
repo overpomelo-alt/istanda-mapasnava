@@ -3,16 +3,40 @@
    配色與動畫沿用 v0 Picgram 原版,只把 Tailwind 翻譯成原生 CSS
    ============================================================ */
 
-/* ===== CSS 變數(對應 v0 globals.css)===== */
+/* ===== CSS 變數(v2 視覺翻盤:布農族白底 + 五色語意命名)===== */
 :root {
-  --bg:           #141414;   /* 深炭灰背景 */
-  --bg-soft:      #1c1c1c;   /* 卡片背景 */
-  --bg-elevated: #232323;   /* 高一階區塊 */
-  --text:         #f2f2f2;   /* 主文字 */
-  --text-muted:  #8a8a8a;   /* 次要文字 */
-  --border:       #2e2e2e;   /* 邊框 */
-  --accent:       #e85a8a;   /* 粉紅強調色(對應 v0 ring 色) */
-  --like-red:    #ed4956;   /* Instagram 經典愛心紅 */
+  /* ===== 主背景:溫暖白底(不是純白、不刺眼)===== */
+  --bg:           #fafaf7;   /* 麻線本色(布農白) */
+  --bg-soft:      #f4f1ea;   /* 米色卡片底 */
+  --bg-elevated:  #ffffff;   /* 最高一階(modal、彈出層)用純白 */
+  --bg-hero:      #1a1a1a;   /* Hero / 重要區塊用沉黑(布農黑、土地、祖靈) */
+
+  /* ===== 文字 ===== */
+  --text:         #1a1a1a;   /* 主文字:沉黑 */
+  --text-soft:    #4a4a4a;   /* 次主文字 */
+  --text-muted:   #8a8a8a;   /* 灰字 */
+  --text-on-dark: #f4f1ea;   /* 深底上的字(Hero 區、toast 用) */
+
+  /* ===== 布農族五色語意命名(給之後文化元素用、非主結構)===== */
+  --bunun-black:  #1a1a1a;   /* 黑泥黑 */
+  --bunun-white:  #fafaf7;   /* 麻線白 */
+  --bunun-red:    #a83232;   /* 薯榔紅(暗一階莊重紅、非互動紅心)*/
+  --bunun-yellow: #d4a017;   /* 薑黃 */
+  --bunun-green:  #4a6b3a;   /* 山藍青綠 */
+
+  /* ===== 強調色 ===== */
+  --accent:       #d4a017;   /* 薑黃(取代 v1 粉紅 #e85a8a) */
+
+  /* ===== 邊框 ===== */
+  --border:       #e4ddd0;   /* 米色淡邊框 */
+  --border-strong:#1a1a1a;   /* 黑色強邊框 */
+
+  /* ===== IG 互動色(保留、不要動)===== */
+  --like-red:     #ed4956;   /* Instagram 經典愛心紅(按讚用) */
+  /* 限動五色漸層(.story__ring / .post__avatar-ring 用):
+     background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); */
+  /* 強調動作漸層(大麥克風按鈕、底部錄音 nav、上傳按鈕用):
+     background: linear-gradient(135deg, #f09433, #dc2743); */
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -33,8 +57,8 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.6;
   overscroll-behavior-y: contain;
 }
 button {
