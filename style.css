@@ -1,0 +1,537 @@
+/* ============================================================
+   Istanda Mapasnava · style.css
+   配色與動畫沿用 v0 Picgram 原版,只把 Tailwind 翻譯成原生 CSS
+   ============================================================ */
+
+/* ===== CSS 變數(對應 v0 globals.css)===== */
+:root {
+  --bg:           #141414;   /* 深炭灰背景 */
+  --bg-soft:      #1c1c1c;   /* 卡片背景 */
+  --bg-elevated: #232323;   /* 高一階區塊 */
+  --text:         #f2f2f2;   /* 主文字 */
+  --text-muted:  #8a8a8a;   /* 次要文字 */
+  --border:       #2e2e2e;   /* 邊框 */
+  --accent:       #e85a8a;   /* 粉紅強調色(對應 v0 ring 色) */
+  --like-red:    #ed4956;   /* Instagram 經典愛心紅 */
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --header-h: 56px;
+  --bottom-nav-h: 60px;
+  --max-w: 512px;   /* mobile-first 最大寬度 */
+
+  --font-sans: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ===== Reset ===== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.5;
+  overscroll-behavior-y: contain;
+}
+button {
+  background: none; border: none; cursor: pointer;
+  color: inherit; font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+img { display: block; max-width: 100%; }
+
+/* ============================================================
+   HEADER · 頂部標題列
+   ============================================================ */
+.app-header {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(20, 20, 20, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+.app-header__inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  height: var(--header-h);
+  padding: 0 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.app-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  /* 想換成手寫體 logo 之後也可以改 */
+}
+.app-header__actions { display: flex; gap: 4px; }
+
+.icon-btn {
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  color: var(--text);
+  transition: background 0.15s, transform 0.15s;
+}
+.icon-btn:hover { background: var(--bg-soft); }
+.icon-btn:active { transform: scale(0.92); }
+.icon-btn svg { width: 24px; height: 24px; }
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+.app-main {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding-bottom: calc(var(--bottom-nav-h) + 24px);
+}
+
+/* ============================================================
+   STORIES · 限動圈圈(家族成員)
+   ============================================================ */
+.stories-section {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+}
+.stories-scroll {
+  display: flex;
+  gap: 14px;
+  padding: 4px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stories-scroll::-webkit-scrollbar { display: none; }
+
+.story {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 漸層圈圈外框(對應 v0 .story-ring) */
+.story__ring {
+  width: 68px; height: 68px;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+}
+.story__ring--viewed {
+  background: var(--bg-elevated);   /* 看過了 = 灰色 */
+}
+.story__ring--add {
+  background: var(--bg-soft);
+}
+.story__inner {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  padding: 2px;
+  background: var(--bg);
+}
+
+/* 頭像(initials 圓圈,呼應 memory 裡的 CU、TI 設計) */
+.story__avatar {
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
+}
+.story:active .story__avatar { transform: scale(0.95); transition: transform 0.15s; }
+
+/* 「+」新增限動按鈕 */
+.story__add-badge {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--bg);
+  font-size: 16px; font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+.story__ring-wrap { position: relative; }
+
+.story__name {
+  font-size: 12px;
+  color: var(--text);
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.story__name--viewed { color: var(--text-muted); }
+
+/* ============================================================
+   FEED · 動態牆
+   ============================================================ */
+.feed-section {
+  padding: 16px 0;
+  display: flex; flex-direction: column;
+  gap: 12px;
+}
+.feed-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 16px;
+  font-size: 14px;
+}
+
+/* ===== Post Card · 貼文卡片 ===== */
+.post {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* 貼文頭部:頭像 + 名字 + 「⋯」 */
+.post__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+}
+.post__user { display: flex; align-items: center; gap: 12px; }
+
+.post__avatar-ring {
+  padding: 2px;
+  border-radius: 50%;
+  background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);
+}
+.post__avatar-inner {
+  padding: 2px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+.post__avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
+}
+
+.post__meta { display: flex; flex-direction: column; }
+.post__name {
+  font-size: 14px; font-weight: 600;
+  color: var(--text);
+}
+.post__location {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 貼文主圖(預留位置給之後接 Google Drive 影片) */
+.post__media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--bg-soft);
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+.post__media img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+/* 之後 Google Drive 嵌入用:把 <iframe> 放這裡 */
+.post__media iframe {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  border: 0;
+}
+
+/* 雙擊時冒出的大愛心動畫 */
+.heart-burst {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+}
+.heart-burst.is-burst {
+  animation: heart-burst 0.8s ease-out forwards;
+}
+.heart-burst svg {
+  width: 100px; height: 100px;
+  color: #fff;
+  fill: #fff;
+  filter: drop-shadow(0 2px 12px rgba(0,0,0,0.4));
+}
+@keyframes heart-burst {
+  0%   { opacity: 0; transform: scale(0.3); }
+  30%  { opacity: 1; transform: scale(1.2); }
+  60%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.1); }
+}
+
+/* 貼文行動列(❤️ 💬 📤 🔖) */
+.post__actions {
+  padding: 10px 12px 4px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.post__actions-left { display: flex; gap: 4px; }
+
+.action-btn {
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  color: var(--text);
+  transition: transform 0.15s, color 0.15s;
+}
+.action-btn:active { transform: scale(0.88); }
+.action-btn svg { width: 24px; height: 24px; }
+
+.action-btn--liked { color: var(--like-red); }
+.action-btn--liked svg { fill: var(--like-red); animation: pop 0.3s ease; }
+@keyframes pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+.action-btn--saved svg { fill: var(--text); }
+
+/* 貼文文字內容 */
+.post__body { padding: 0 16px 12px; }
+.post__likes {
+  font-size: 14px; font-weight: 600;
+  margin-bottom: 4px;
+}
+.post__caption {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.post__caption-author {
+  font-weight: 600;
+  margin-right: 6px;
+}
+.post__comments-link {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.post__time {
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   BOTTOM NAV · 底部導覽
+   ============================================================ */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  height: var(--bottom-nav-h);
+  background: rgba(20, 20, 20, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);   /* iPhone 安全區 */
+}
+.bottom-nav > * { /* inner spacing 用 flex */ }
+.bottom-nav {
+  display: flex; align-items: center; justify-content: space-around;
+  max-width: var(--max-w);
+  margin: 0 auto;
+}
+.nav-btn {
+  flex: 1;
+  height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text);
+  transition: transform 0.15s;
+}
+.nav-btn:active { transform: scale(0.9); }
+.nav-btn svg { width: 26px; height: 26px; }
+.nav-btn--active svg { fill: var(--text); }
+
+/* 中間錄音按鈕做得醒目一點(這是 Istanda Mapasnava 的核心動作) */
+.nav-btn--record {
+  position: relative;
+}
+.nav-btn--record::before {
+  content: '';
+  position: absolute;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f09433, #dc2743);
+  z-index: -1;
+  opacity: 0.15;
+}
+
+.nav-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600;
+  background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
+  color: #fff;
+  border: 2px solid var(--text);
+}
+
+/* ============================================================
+   桌機放大時的版面(可選)
+   ============================================================ */
+@media (min-width: 768px) {
+  .app-main { padding-top: 8px; }
+  .post {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin: 0 8px;
+    overflow: hidden;
+  }
+}
+/* ============================================================
+   ADDITIONS · 「我是誰」modal + 全域 toast
+   附加到 style.css 結尾即可 (v1.1)
+   ============================================================ */
+
+/* ===== 「我是誰」Modal ===== */
+.identity-modal {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.identity-modal__backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.identity-modal__panel {
+  position: relative;
+  width: 100%;
+  max-width: var(--max-w);
+  max-height: 80vh;
+  background: var(--bg-soft);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-top: 1px solid var(--border);
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column;
+  animation: slideUp 0.25s ease-out;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.identity-modal__header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+.identity-modal__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.identity-modal__sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.identity-modal__list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  /* 平滑滾動條 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.identity-modal__list::-webkit-scrollbar { width: 4px; }
+.identity-modal__list::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 2px;
+}
+
+.identity-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  transition: background 0.15s, transform 0.1s;
+  text-align: left;
+  width: 100%;
+}
+.identity-row:hover { background: var(--bg-elevated); }
+.identity-row:active { transform: scale(0.98); }
+
+.identity-row__avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
+  color: #fff;
+  font-size: 13px; font-weight: 600;
+  flex-shrink: 0;
+}
+
+.identity-row__text {
+  flex: 1; min-width: 0;
+}
+.identity-row__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.identity-row__nick {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.identity-modal__cancel {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.identity-modal__cancel:active {
+  transform: scale(0.98);
+}
+
+/* ===== 全域 Toast ===== */
+.global-toast {
+  position: fixed;
+  bottom: calc(var(--bottom-nav-h) + 16px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 22px;
+  font-size: 13px;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.global-toast--show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
