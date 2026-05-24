@@ -76,33 +76,41 @@
 
 ## 🔄 進行中
 
-- [ ] **Task 1：個人頁面 member.html**（規格見 `specs/task-recording-core.md`、Recon 已完成、等動工）
+- [ ] **Task 1：個人頁面 member.html**（Step 1 ✅ Apps Script doPost 已部署回 `{ok, fileId, filename}`、Step 2 ✅ Hero 渲染 commit `2f916b2`、Step 3-5 待動工、規格見 `specs/task-recording-core.md`）
 
 ---
 
-## ⏳ 6/15 前必做（依執行順序）
+## ⏳ 6/15 前必做（依執行順序、2026-05-24 重排）
 
-**本週 5/19-5/25**
-1. Task 1：member.html（個人頁面 + 錄音核心 + Apps Script 改回傳 fileId + iOS mimeType）
-2. ✅ Task 2：首頁卡片可點擊跳轉到 member.html（2026-05-24 確認、實作在 v0 `c431e54`、smoke test PASS）
+> **重排原因**：Task 3 Recon 發現 Task 1 Step 3-4 沒做、recordings 集合空無資料、Task 3 必須 block 在 Task 1 之後。詳見「📝 決策記錄」2026-05-24（晚）那筆。
+
+**本週 5/19-5/24（已過 / 部分完成）**
+- ✅ Task 2：首頁卡片可點擊跳轉到 member.html（2026-05-24 確認、實作在 v0 `c431e54`、smoke test PASS）
+- 🔄 Task 1 Step 1 ✅ Apps Script 部署 + Step 2 ✅ Hero 渲染、Step 3-5 待動工
+
+**本週剩 5/24-5/25**
+- Task 1 Step 3 Recon + 切細步（不動 code、Recon only）
 
 **下週 5/26-6/1**
-3. Task 3：按讚 ❤️ + 留言 💬（Firestore 即時、樂觀更新）
-4. Task 4：LINE 一鍵分享（單則錄音、Web Share API）
+1. Task 1 Step 3-5 跑完（錄音核心 + 過去清單 + DoD）
+2. Task 3 開頭（按讚 / 留言 Recon + 部分實作）
 
 **第三週 6/2-6/8**
-5. Task 5：首頁動態 Feed 改成從 Firestore 即時讀
-6. Task 6：PWA 化（manifest.json + sw.js + 圖示）
+3. Task 3 收尾（按讚 + 留言 bottom sheet 完整）
+4. Task 4：LINE 一鍵分享（單則錄音、Web Share API）
 
-**緩衝週 6/9-6/15**
-- 拍家人頭像照片（盡量收）
-- 給 1-2 個家人試用、收回饋
-- 修最後 bug
-- 6/15 上線 🎉
+**第四週 6/9-6/15**
+5. Task 5：首頁 Feed source 切到 recordings collection（順帶解 v0 `posts` placeholder）
+- 緩衝：拍家人頭像、給 1-2 個家人試用、收回饋、修最後 bug
+- **6/15 上線** 🎉
+
+**🟡 6/15 後候選（原本 6/15 必做、現順延）**
+- Task 6：PWA 化（manifest.json + sw.js + 圖示）— 6/15 上線後評估必要再做
 
 **第二死線 6/16-6/22**
 - 觀察打開率（目標：6/22 ≥ 6/15）
 - 7 天內錄第二段以上的人數
+- Task 6 PWA 補上（若 6/15 上線後評估必要）
 
 ## 🗓 6/15 後再做（已從 6/15 衝刺砍掉）
 
@@ -226,6 +234,14 @@ recordings/{自動ID}/
 - **設計思想**：日常感優先於儀式感。布農族沉黑大面積色票留給之後的文化元素章節（6/15 後）、不在 v2 結構性大面積使用
 - **歸檔**：完整落地補丁寫進 `specs/visual-direction-v2.md` 末尾「## 落地補丁」章節（不刪原文、保留決策軌跡）
 - **下一步**：Task 2 首頁卡片可點擊跳轉到 `member.html`（6/15 死線必做清單第 2 項）
+
+### 2026-05-24（晚）：Task 1 真實進度修正、6/15 衝刺路線重排
+- **背景**：Task 3 動工前 Recon、讀 `member.html` 才發現 Task 1 只跑到 Step 2 骨架、Step 3-4 沒做、Firestore `recordings` collection 沒任何資料
+- **發現**：Task 3 按讚 / 留言對象（個人頁錄音清單）整個東西不存在、Task 3 必須 block 在 Task 1 之後
+- **Step 1 補狀態**：Apps Script doPost 已改、聖瑱師親手部署過、無痕視窗 `?action=list` 驗證 PASS（線上 Apps Script 已是新版、回傳 `{ok, fileId, filename}`）
+- **選擇**：走選項 A、先補完 Task 1 Step 3+4+5、再進 Task 3
+- **時程影響**：Task 3 順延一週、Task 4 也順延一週、Task 6 PWA 從「6/15 必做」改成「6/15 後候選」（6/15 上線後評估必要再做）
+- **下一步**：Task 1 Step 3 Recon（本週日晚 ~ 週一）、切 3-4 子步、下週 5/26-6/1 動工
 
 ---
 
