@@ -66,6 +66,12 @@
 - [x] 兩個翻盤決定：header/nav 補拍板純白霧（spec 未明確）+ Hero 從沉黑織片翻成純白（spec 拍板沉黑、落地後翻盤）
 - [x] 落地補丁完整歸檔在 `specs/visual-direction-v2.md` 末尾「## 落地補丁」章節
 
+### Task 2：首頁卡片可點擊跳轉到 member.html（2026-05-24 確認、實作在 c431e54、smoke test PASS）
+- [x] 實作其實已在 v0 commit `c431e54` 完成（`script.js:163-166` `renderStories` 內 click listener）
+- [x] 第一顆「我的記事」走 `handleRecordPressed()`（`script.js:205-214`）：沒選過「我」開 modal、選過了直跳
+- [x] 線上 smoke test 三顆全部 PASS：CU / TI 跳對成員 `member.html?id=...`、「我的記事」開「我是誰」modal
+- [x] Task 2 不需要寫新 code、Recon 直接歸檔
+
 ---
 
 ## 🔄 進行中
@@ -78,7 +84,7 @@
 
 **本週 5/19-5/25**
 1. Task 1：member.html（個人頁面 + 錄音核心 + Apps Script 改回傳 fileId + iOS mimeType）
-2. Task 2：首頁卡片可點擊跳轉到 member.html
+2. ✅ Task 2：首頁卡片可點擊跳轉到 member.html（2026-05-24 確認、實作在 v0 `c431e54`、smoke test PASS）
 
 **下週 5/26-6/1**
 3. Task 3：按讚 ❤️ + 留言 💬（Firestore 即時、樂觀更新）
@@ -177,6 +183,7 @@ recordings/{自動ID}/
 - **Apps Script 改 code 後容易忘記重新部署**：每次改完要去「管理部署作業 → 編輯 → 版本選新版本」，否則程式碼不會生效
 - **`?action=list` 全撈無篩選**：現在 2 人 OK、6/15 後膨脹到幾百筆會浪費流量，標為 TODO、6/15 後優化（加 `?memberId=xxx` 參數過濾）
 - **MediaRecorder 在 file:// 拿不到麥克風**：A 階段自測直接 push 到 main 線上測，反正沒家人在用
+- **首頁 demo fallback `id: null` 潛在 bug**：`script.js:408-411` Firestore 連不上時 fallback 用 demo data、`id: null`、點圈圈會跳 `member.html?id=null`。實際不會走到(已有 2 筆 seed)、Task 3 寫 Firestore 即時 listener 時順手收掉(改成 fallback 走「請稍候重連」或 disable click)
 
 ---
 
