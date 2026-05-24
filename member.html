@@ -139,6 +139,64 @@
     }
     .record-hint--recording { color: #d04848; }
 
+    /* ===== 試聽區（子步 3b:三按鈕橫排、預設 hidden、錄完才出現）===== */
+    .playback-section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 0 16px 24px;
+      text-align: center;
+    }
+    .playback-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+    .playback-btn {
+      flex: 1;
+      min-width: 0;
+      height: 44px;
+      border-radius: 22px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      padding: 0 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .playback-btn:active { transform: scale(0.96); }
+    .playback-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .playback-btn:disabled:active { transform: none; }
+    /* 試聽（spec line 126:bg-elevated + text）*/
+    .playback-btn--play {
+      background: var(--bg-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    /* 重錄（spec line 127:透明 + border）*/
+    .playback-btn--reset {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    /* 上傳（spec line 128:強調動作漸層 + 白字、子步 3c 才接邏輯、現在 disabled）*/
+    .playback-btn--upload {
+      background: linear-gradient(135deg, #f09433, #dc2743);
+      color: #fff;
+      border: none;
+    }
+    .playback-hint {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
     /* ===== 過去錄音清單 placeholder (Step 4 才實作) ===== */
     .recordings-section {
       max-width: var(--max-w);
@@ -237,6 +295,17 @@
           </svg>
         </button>
         <div class="record-hint" id="recordHint">點麥克風開始錄音</div>
+      </section>
+
+      <!-- 試聽區（子步 3b:三按鈕橫排、預設 hidden、錄完才出現）-->
+      <section class="playback-section" id="playbackSection" hidden>
+        <audio id="playbackAudio" preload="auto"></audio>
+        <div class="playback-row">
+          <button class="playback-btn playback-btn--play"   id="playBtn"   aria-label="試聽">▶ 試聽</button>
+          <button class="playback-btn playback-btn--reset"  id="resetBtn"  aria-label="重錄">↻ 重錄</button>
+          <button class="playback-btn playback-btn--upload" id="uploadBtn" aria-label="上傳" disabled>☁ 上傳</button>
+        </div>
+        <div class="playback-hint" id="playbackHint">錄好了、確認後上傳</div>
       </section>
 
       <!-- 過去錄音清單 placeholder (Step 4 才實作) -->
@@ -410,7 +479,8 @@
       recordBtn.classList.remove("record-btn--recording");
       recordBtn.setAttribute("aria-label", "開始錄音");
       recordHint.classList.remove("record-hint--recording");
-      recordHint.textContent = "點麥克風開始錄音";
+      // 子步 3b 改:有 recordedBlob 時引導往下看試聽區、否則回初始文字
+      recordHint.textContent = recordedBlob ? "錄好了、看下面試聽 / 重錄 / 上傳" : "點麥克風開始錄音";
       if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
       if (autoStopTimer)  { clearTimeout(autoStopTimer);   autoStopTimer  = null; }
       secElapsed = 0;
@@ -449,10 +519,8 @@
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop()); // 釋放麥克風
         recordedBlob = new Blob(recordedChunks, { type: picked.mime });
-        const kb = Math.round(recordedBlob.size / 1024);
-        // 子步 3a 收尾:用 toast 確認 blob 產出、按鈕回 idle、子步 3b 才接試聽 UI
-        showToast(`✅ 錄完 ${kb} KB、試聽功能子步 3b 接`, 2800);
         setIdleUI();
+        showPlayback(); // 子步 3b:跳出試聽區、上傳按鈕仍 disabled、子步 3c 才接上傳
       };
 
       mediaRecorder.start();
@@ -471,6 +539,59 @@
       } else {
         startRecording();
       }
+    });
+
+    /* ============================================================
+       子步 3b:試聽 / 重錄 控制(上傳按鈕 disabled、子步 3c 才接邏輯)
+       ============================================================ */
+
+    const playbackSection = document.getElementById("playbackSection");
+    const playbackAudio   = document.getElementById("playbackAudio");
+    const playBtn         = document.getElementById("playBtn");
+    const resetBtn        = document.getElementById("resetBtn");
+    const playbackHint    = document.getElementById("playbackHint");
+
+    let playbackUrl = null;
+
+    function showPlayback() {
+      if (!recordedBlob) return;
+      if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+      playbackUrl = URL.createObjectURL(recordedBlob);
+      playbackAudio.src = playbackUrl;
+      playBtn.textContent = "▶ 試聽";
+      playbackSection.hidden = false;
+      const kb = Math.round(recordedBlob.size / 1024);
+      playbackHint.textContent = `錄好 ${kb} KB、上傳功能子步 3c 接`;
+    }
+
+    function hidePlayback() {
+      playbackSection.hidden = true;
+      playbackAudio.pause();
+      playbackAudio.removeAttribute("src");
+      playbackAudio.load();
+      if (playbackUrl) { URL.revokeObjectURL(playbackUrl); playbackUrl = null; }
+      playBtn.textContent = "▶ 試聽";
+      recordedBlob   = null;
+      recordedChunks = [];
+      setIdleUI(); // hint 切回「點麥克風開始錄音」
+    }
+
+    playBtn.addEventListener("click", () => {
+      if (playbackAudio.paused) {
+        playbackAudio.play();
+        playBtn.textContent = "⏸ 暫停";
+      } else {
+        playbackAudio.pause();
+        playBtn.textContent = "▶ 試聽";
+      }
+    });
+
+    playbackAudio.addEventListener("ended", () => {
+      playBtn.textContent = "▶ 試聽";
+    });
+
+    resetBtn.addEventListener("click", () => {
+      hidePlayback();
     });
 
     main();
