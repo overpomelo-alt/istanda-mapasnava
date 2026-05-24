@@ -266,6 +266,32 @@
 
 ---
 
+## 🔁 posts → recordings 遷移計畫(2026-05-24 Task 3 Recon 補)
+
+> 這章是 Task 3 Recon 時、發現 `script.js:421` 抓 `posts` 但 spec 只定義 `recordings` 才補上的。
+> 不是 Task 1 範圍、但因為按讚 / 留言邏輯動的是 `recordings`、需先講清楚這條遷移路徑。
+
+### 現況(v0 commit `c431e54` 後)
+- 首頁 `index.html` 的 `createPostCard` 渲染來自 `posts` collection(`script.js:421` 附近)
+- `posts` collection **不存在於任何 spec**、是 v0 留下的 placeholder、Firestore 也沒實際資料(`script.js` catch 走 empty state)
+- 個人頁面 `member.html` 的過去錄音清單接的是 Apps Script `?action=list` → 不是 Firestore
+
+### Task 3 後(本次動工)
+- `recordings.likes` 從 `number` 改成 `array of deviceId`、`recordings.comments` 從 `array` 變成 `array of {deviceId, memberId, text, createdAt}`
+- 真資料寫在 `recordings`(個人頁面錄音清單操作)
+- 首頁 `createPostCard` 仍接 `posts` collection、**不動**
+
+### Task 5(6/2-6/8 那週)
+- 首頁 Feed source 切到 `recordings` collection、`createPostCard` 改吃 recording 物件
+- 按讚 / 留言一致性自然解決:不管從首頁按、還是從個人頁按、都寫同一份 `recordings.likes` / `recordings.comments`
+
+### 過渡期(Task 3 完成 → Task 5 完成、約 1-2 週)
+- 首頁按讚 / 留言 UI **暫時空轉**(`posts` collection 不存在、catch 後 empty state、根本沒貼文卡片可按)
+- 個人頁面按讚 / 留言**正常運作**(寫進 `recordings`、有真資料)
+- 實質影響:幾乎為零、因為使用者在過渡期看到的首頁是 empty state、按讚 UI 還沒出現在他們面前
+
+---
+
 ## 📞 規則 6：不確定就問
 
 如果 Claude Code 遇到 spec 沒提到的情況、**不要硬寫**。停下來問使用者。

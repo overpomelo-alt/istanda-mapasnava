@@ -417,6 +417,9 @@ async function main() {
     applyMyIdentity();
 
     // 抓貼文 (Firestore posts collection)
+    // ⚠️ v0 placeholder:posts collection 不存在於任何 spec、是 v0 留下的假資料源。
+    //   Task 5(6/2-6/8)會把 source 切到 recordings collection、屆時這段刪除。
+    //   詳見 specs/task-recording-core.md「🔁 posts → recordings 遷移計畫」章節。
     try {
       const postsSnap = await getDocs(
         query(collection(db, "posts"), orderBy("createdAt", "desc"))
