@@ -303,7 +303,7 @@
         <div class="playback-row">
           <button class="playback-btn playback-btn--play"   id="playBtn"   aria-label="試聽">▶ 試聽</button>
           <button class="playback-btn playback-btn--reset"  id="resetBtn"  aria-label="重錄">↻ 重錄</button>
-          <button class="playback-btn playback-btn--upload" id="uploadBtn" aria-label="上傳" disabled>☁ 上傳</button>
+          <button class="playback-btn playback-btn--upload" id="uploadBtn" aria-label="上傳">☁ 上傳</button>
         </div>
         <div class="playback-hint" id="playbackHint">錄好了、確認後上傳</div>
       </section>
@@ -364,7 +364,10 @@
   <!-- ============ Firebase + 應用邏輯 ============ -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+    import {
+      getFirestore, doc, getDoc,
+      collection, addDoc, updateDoc, serverTimestamp, increment
+    } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -377,6 +380,13 @@
     };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
+    // Apps Script 上傳端點(Step 1 已部署、回 {ok, fileId, filename})
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAglNgdZo-KCyRaOYWRjrNhIQvjRC8exQn_ATqX7ozvTCKRsCTqLsWwAJDVEcKZQYnoQ/exec";
+
+    // Module-level state(子步 3c 上傳邏輯要用)
+    let memberId = null;          // main() 從 URL 拿
+    let localRecordCount = 0;     // renderHero init、上傳成功本地 +1(N2 拍板)
 
     function showError(title, msg) {
       document.getElementById("appContent").hidden = true;
@@ -395,14 +405,16 @@
       document.getElementById("heroAvatar").textContent = m.initials || fallbackInitials;
       document.getElementById("heroName").textContent = m.name || "(無族名)";
       document.getElementById("heroNick").textContent = m.nickname || "";
-      // N 則錄音:Step 4 會改成讀清單長度,Step 2 先寫 0
-      document.getElementById("heroCount").textContent = "0 則錄音";
+      // 子步 3c 改:從 Firestore 讀 m.recordCount(雙寫的快取值)、上傳成功會本地 +1
+      // (Step 4 會改成讀「過去錄音清單長度」為真、recordCount 仍雙寫但顯示用清單長度為準)
+      localRecordCount = m.recordCount || 0;
+      document.getElementById("heroCount").textContent = `${localRecordCount} 則錄音`;
       document.getElementById("headerTitle").textContent = m.name || "成員頁面";
       document.title = `${m.name || "成員"} · Istanda Mapasnava`;
     }
 
     async function main() {
-      const memberId = new URLSearchParams(window.location.search).get("id");
+      memberId = new URLSearchParams(window.location.search).get("id");
       if (!memberId) {
         showError("缺少成員 ID", "這個頁面要從首頁點某位家人才會進得來,回首頁挑一位吧。");
         return;
@@ -593,6 +605,92 @@
     resetBtn.addEventListener("click", () => {
       hidePlayback();
     });
+
+    /* ============================================================
+       子步 3c:上傳 Apps Script + Firestore 雙寫(recordings + recordCount)
+       拍板對應:N1 likes/comments 寫新格式 array、N2 成功才本地 +1、F3 base64>5MB warn
+       ============================================================ */
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result; // 形式:data:audio/webm;base64,XXXX
+          const comma = result.indexOf(",");
+          resolve(comma >= 0 ? result.substring(comma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function handleUpload() {
+      if (!recordedBlob || !memberId) {
+        showToast("⚠ 沒錄音可上傳", 2200);
+        return;
+      }
+
+      // 三鈕同時 disabled 防多按
+      uploadBtn.disabled = true;
+      playBtn.disabled   = true;
+      resetBtn.disabled  = true;
+      const originalUploadText = uploadBtn.textContent;
+      uploadBtn.textContent = "☁ 上傳中…";
+      showToast("☁ 上傳中…", 2200);
+
+      try {
+        const base64 = await blobToBase64(recordedBlob);
+
+        // F3:base64 > 5MB 就 warn(Apps Script POST 上限約 6MB、避免超標靜默失敗)
+        if (base64.length > 5 * 1024 * 1024) {
+          console.warn(`⚠ base64 size ${(base64.length / 1024 / 1024).toFixed(2)}MB > 5MB、接近 Apps Script POST 上限`);
+        }
+
+        const filename = `${memberId}.${recordedExt}`;
+        const resp = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({ audio: base64, filename })
+        });
+        const data = await resp.json();
+
+        if (!data.ok) throw new Error(data.error || "Apps Script 回 ok=false");
+
+        // 寫 Firestore recordings(N1 拍板:likes/comments 直接寫新格式 array)
+        await addDoc(collection(db, "recordings"), {
+          memberId,
+          fileId: data.fileId,
+          filename: data.filename,
+          mimeType: recordedBlob.type,
+          createdAt: serverTimestamp(),
+          likes: [],     // Task 3 拍板:array of deviceId(代替原 spec 預留的 number)
+          comments: []   // Task 3 拍板:array of {deviceId, memberId, text, createdAt}
+        });
+
+        // 雙寫 recordCount(Q5 拍板)
+        await updateDoc(doc(db, "members", memberId), {
+          recordCount: increment(1)
+        });
+
+        // N2 拍板:本地 +1 只在「上傳成功的 callback 裡」做、失敗 UI 不變
+        localRecordCount += 1;
+        document.getElementById("heroCount").textContent = `${localRecordCount} 則錄音`;
+
+        showToast("☁ 上傳成功!", 2200);
+        hidePlayback(); // 試聽區消失、回 idle
+
+      } catch (err) {
+        console.error("上傳失敗:", err);
+        showToast("⚠ 上傳失敗、請重試", 3500);
+        // 失敗:UI 不變、保留試聽區、用戶可再按 ☁ 重試 或 ↻ 重錄
+      } finally {
+        uploadBtn.disabled = false;
+        playBtn.disabled   = false;
+        resetBtn.disabled  = false;
+        uploadBtn.textContent = originalUploadText;
+      }
+    }
+
+    uploadBtn.addEventListener("click", handleUpload);
 
     main();
   </script>
