@@ -292,3 +292,88 @@
 
 *Created: 2026-05-22*
 *由聖瑱師拍板:大方向白底布農族五色、按讚保留 IG 紅心、Hero ring 保留 IG 五色漸層、文化元素留 6/15 後*
+
+---
+
+## 落地補丁(2026-05-24 視覺翻盤完成後追加)
+
+> 以下是 Step 1-4 全部跑完後、4 個畫面線上實機驗證通過後、回頭整理的「spec 沒寫明 / spec 拍板後翻盤」的決策記錄。
+> 不刪原文、不改原文、用追加章節保留決策軌跡。
+> HEAD:`85f7303`
+
+### 翻盤 1:header / nav 配色補拍板
+
+spec 原文(line 124、143)只寫到背景 rgba 從黑霧改白霧、文字從米白改沉黑、但沒明確指定背景透明度與邊框細節。落地最終定案:
+
+- `app-header` / `bottom-nav` 背景:`rgba(255, 255, 255, 0.85)` 純白霧
+- 上 / 下邊框:`0.5px solid var(--border)` 米邊
+- backdrop-filter 保留
+
+**為什麼選純白霧、不是 spec 推測的米白霧:**
+
+- 目標族群是 87 人家族日常使用、純白比米白更現代
+- 小孩 / 年輕家人接受度高(年輕人是讓 App 持續活著的關鍵)
+- LINE 分享出去截圖時不打架系統 UI(LINE / iOS 多半是純白底)
+
+對應 commit:`80ef1a2`
+
+### 翻盤 2:member.html Hero 從沉黑織片 → 純白
+
+spec 原本拍板(line 156、222-224):Hero 用 `--bg-hero` 沉黑塊、像「服飾的深色領片」鑲在白色頁面上、文字改 `--text-on-dark` 米白。
+
+`2dc9915` 照 spec 落地完成、但實機看起來太重:
+
+- 個人頁面進入頻率高(將是日常入口)、每次都被深色塊壓住情緒不對
+- 跟「家族 Instagram、不是博物館」(`north-star.md`)的氣質衝突
+- 儀式感蓋過日常感
+
+`aa56e1d` 翻盤成 `var(--bg-elevated)` 純白:
+
+- `.member-hero` 背景改純白
+- `.member-hero__name` / `.member-hero__nick` / `.member-hero__count` 文字色全部翻回 `--text` / `--text-muted` 沉黑系
+- `.member-hero__ring-inner` 改灰漸層 `linear-gradient(135deg, #6b6b6b, #8a8a8a)` —— 避免內圈純白跟 Hero 純白融邊、限動五色 ring 還是看得到
+- Sticky header / Hero 一體白底、不再有刻意對比
+
+**設計思想:日常感優先於儀式感。**
+
+對應 commit:`2dc9915`(沉黑落地)→ `aa56e1d`(翻盤純白)
+
+### Hero ring-inner 灰漸層 vs 首頁限動圈白:尺寸差異化處理(刻意、非 bug)
+
+首頁 `.story__ring` 內部 avatar 是灰漸層 `#4a4a4a → #6b6b6b`(spec line 129 保留)、但尺寸小(56px)、灰漸層在白底上提供對比、視覺穩。
+
+Hero `.member-hero__ring-inner` 尺寸大(120px)、如果用同一組灰漸層會顯得太暗太沉、所以改成稍淺一階的 `#6b6b6b → #8a8a8a`。
+
+兩處灰漸層**顏色不同是刻意的**、不是 bug、之後不要試圖「統一」。
+
+### Step 4 收尾的設計微調
+
+`85f7303` 把 spec 沒寫到的最後幾處清乾淨:
+
+- `.error-screen__home` 鈕:`--bg-soft` 米色 + `--border` 邊框(原本是純白、在白底上沒有邊界、按起來像不能按)
+- `.identity-modal` 三層白色微對比:backdrop 半透明黑(保留)→ panel 純白 `--bg-elevated` → row hover `--bg-soft` 米色、三層之間有層次但都在白色系
+- `<meta name="theme-color">` 兩個 HTML 都改純白 `#ffffff`(iOS Safari 上方狀態列跟 Hero 純白同色、視覺一體)
+
+### 掃尾 grep 結果
+
+Step 4 完成後掃過:
+
+- `#141414` / `#f2f2f2`:**0 筆殘留**
+- 其他舊深色寫死值:**0 筆殘留**
+- 唯一保留的 hardcode 色:`--text-muted: #8a8a8a`(spec 預期允許)+ 限動五色漸層(IG 互動符號、不動)+ `--like-red: #ed4956`(IG 互動符號、不動)
+
+### 五個 commit 旅程
+
+| Step | Commit | 訊息 |
+|---|---|---|
+| Step 1 | `8f4612b` | 翻 `:root` 為布農族白底 + body 字級 16px |
+| Step 2 | `80ef1a2` | header/nav 改白霧 + 愛心紅 + toast 沉黑 + 貼文卡片浮起 |
+| Step 3 | `2dc9915` | member.html Hero 改沉黑織片(spec 拍板) |
+| Step 3 翻盤 | `aa56e1d` | Hero 改純白(ring-inner 灰漸層避免融邊) |
+| Step 4 | `85f7303` | 收尾 theme-color 純白 + error-screen 鈕 + identity-modal 配色 |
+
+線上實機驗證通過的 4 個畫面:首頁 / 個人頁(Cina Umav)/ 錯誤畫面(`?id=不存在`)/ 我是誰 modal。
+
+---
+
+*落地補丁 by 聖瑱師 + Claude Code、2026-05-24*
