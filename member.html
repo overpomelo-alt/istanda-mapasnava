@@ -197,6 +197,57 @@
       color: var(--text-muted);
     }
 
+    /* ===== 上傳進度橫條(子步 3c.3:四段式視覺回饋、取代單行 toast)===== */
+    .progress-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 90px;
+      transform: translateX(-50%);
+      width: calc(100% - 32px);
+      max-width: 320px;
+      background: rgba(26, 26, 26, 0.92);
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease-out;
+      z-index: 1100;
+    }
+    .progress-toast--show { opacity: 1; }
+    .progress-toast__row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+      gap: 12px;
+    }
+    .progress-toast__label {
+      color: #f4f1ea;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .progress-toast__hint {
+      color: rgba(244, 241, 234, 0.6);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .progress-toast__track {
+      height: 4px;
+      background: rgba(244, 241, 234, 0.15);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-toast__fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #f58529, #dd2a7b);
+      border-radius: 2px;
+      transition: width 0.4s ease-out, background 0.25s ease-out;
+    }
+    .progress-toast__fill--error { background: var(--like-red); }
+
     /* ===== 過去錄音清單 placeholder (Step 4 才實作) ===== */
     .recordings-section {
       max-width: var(--max-w);
@@ -446,6 +497,65 @@
       toast._t = setTimeout(() => toast.classList.remove("global-toast--show"), ms);
     }
 
+    /* 子步 3c.3:上傳四段進度橫條(取代 handleUpload 內單行 toast、其他 showToast 用途保留)
+       stage: encode/post/get/firestore/success/error
+       percent: 0-100、傳 null 不改寬度(失敗時用、停在當前寬)
+       hint: 覆蓋右側提示文字、傳 undefined 用 preset 預設 */
+    let progressHideTimer = null;
+    function showProgressToast(stage, percent, hint) {
+      let toast = document.getElementById("progressToast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "progressToast";
+        toast.className = "progress-toast";
+        toast.innerHTML = `
+          <div class="progress-toast__row">
+            <span class="progress-toast__label"></span>
+            <span class="progress-toast__hint"></span>
+          </div>
+          <div class="progress-toast__track">
+            <div class="progress-toast__fill"></div>
+          </div>`;
+        document.body.appendChild(toast);
+      }
+      const presets = {
+        encode:    { text: "☁ 編碼中...",     defaultHint: "1/3",      error: false },
+        post:      { text: "☁ 上傳到雲端...", defaultHint: "2/3",      error: false },
+        get:       { text: "☁ 確認中...",     defaultHint: "3/3",      error: false },
+        firestore: { text: "☁ 寫入家族...",   defaultHint: "即將完成", error: false },
+        success:   { text: "✅ 上傳成功!",    defaultHint: "",         error: false },
+        error:     { text: "⚠ 上傳失敗、請重試", defaultHint: "",      error: true  },
+      };
+      const preset = presets[stage];
+      if (!preset) return;
+
+      const label  = toast.querySelector(".progress-toast__label");
+      const hintEl = toast.querySelector(".progress-toast__hint");
+      const fill   = toast.querySelector(".progress-toast__fill");
+
+      label.textContent = preset.text;
+      const hintText = (typeof hint === "string") ? hint : preset.defaultHint;
+      hintEl.textContent = hintText;
+      hintEl.style.display = hintText ? "" : "none";
+      if (percent !== null && percent !== undefined) {
+        fill.style.width = `${percent}%`;
+      }
+      fill.classList.toggle("progress-toast__fill--error", preset.error);
+      toast.classList.add("progress-toast--show");
+
+      if (progressHideTimer) { clearTimeout(progressHideTimer); progressHideTimer = null; }
+      if (stage === "success" || stage === "error") {
+        progressHideTimer = setTimeout(() => {
+          toast.classList.remove("progress-toast--show");
+          // 淡出後 reset 寬度跟錯誤態、避免下次顯示時殘留
+          progressHideTimer = setTimeout(() => {
+            fill.style.width = "0%";
+            fill.classList.remove("progress-toast__fill--error");
+          }, 300);
+        }, 1500);
+      }
+    }
+
     function pickMimeType() {
       if (typeof MediaRecorder === "undefined") return null;
       if (MediaRecorder.isTypeSupported("audio/webm")) return { mime: "audio/webm", ext: "webm" };
@@ -636,9 +746,9 @@
       resetBtn.disabled  = true;
       const originalUploadText = uploadBtn.textContent;
       uploadBtn.textContent = "☁ 上傳中…";
-      showToast("☁ 上傳中…", 2200);
 
       try {
+        showProgressToast("encode", 15);  // 子步 3c.3:四段進度 1/4
         const base64 = await blobToBase64(recordedBlob);
 
         // F3:base64 > 5MB 就 warn(Apps Script POST 上限約 6MB、避免超標靜默失敗)
@@ -651,12 +761,14 @@
         // POST blind:Apps Script web app POST 跨域 redirect 到 googleusercontent.com、
         // 瀏覽器擋 redirect 後的 response body、resp.json() 拿到的 data.fileId 是 undefined。
         // 已實測泰雅語 App 同套 workaround:不解析 response、信任 Drive 端寫入、由下面 GET list 撈 fileId。
+        showProgressToast("post", 55);  // 子步 3c.3:四段進度 2/4
         await fetch(APPS_SCRIPT_URL, {
           method: "POST",
           body: JSON.stringify({ audio: base64, filename })
         });
 
         // GET ?action=list 撈剛寫入的 fileId(GET 跨域 redirect 行為 CORS 友善、能拿 response body)
+        showProgressToast("get", 85);  // 子步 3c.3:四段進度 3/4
         const listResp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
         const listData = await listResp.json();
         const myFiles = listData[memberId] || [];
@@ -682,6 +794,7 @@
 
         // 寫 Firestore recordings(N1 拍板:likes/comments 直接寫新格式 array)
         // 已知限制 R1:同一 member 兩支裝置同分鐘錄會 race、87 人家族短期不會發生、6/15 後再處理
+        showProgressToast("firestore", 95);  // 子步 3c.3:四段進度 4/4
         await addDoc(collection(db, "recordings"), {
           memberId,
           fileId: latest.fileId,
@@ -701,12 +814,12 @@
         localRecordCount += 1;
         document.getElementById("heroCount").textContent = `${localRecordCount} 則錄音`;
 
-        showToast("☁ 上傳成功!", 2200);
+        showProgressToast("success", 100);  // 子步 3c.3:100% + 1.5 秒自動淡出
         hidePlayback(); // 試聽區消失、回 idle
 
       } catch (err) {
         console.error("上傳失敗:", err);
-        showToast("⚠ 上傳失敗、請重試", 3500);
+        showProgressToast("error", null);  // 子步 3c.3:percent=null 停在當前寬度、變紅、1.5 秒淡出
         // 失敗:UI 不變、保留試聽區、用戶可再按 ☁ 重試 或 ↻ 重錄
       } finally {
         uploadBtn.disabled = false;
