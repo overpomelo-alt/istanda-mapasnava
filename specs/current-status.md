@@ -208,7 +208,7 @@ recordings/{自動ID}/
 - **Apps Script 改 code 後容易忘記重新部署**：每次改完要去「管理部署作業 → 編輯 → 版本選新版本」，否則程式碼不會生效
 - **`?action=list` 全撈無篩選**：現在 2 人 OK、6/15 後膨脹到幾百筆會浪費流量，標為 TODO、6/15 後優化（加 `?memberId=xxx` 參數過濾）
 - **MediaRecorder 在 file:// 拿不到麥克風**：A 階段自測直接 push 到 main 線上測，反正沒家人在用
-- **首頁 demo fallback `id: null` 潛在 bug**：`script.js:408-411` Firestore 連不上時 fallback 用 demo data、`id: null`、點圈圈會跳 `member.html?id=null`。實際不會走到(已有 2 筆 seed)、Task 3 寫 Firestore 即時 listener 時順手收掉(改成 fallback 走「請稍候重連」或 disable click)
+- ✅ **首頁 demo fallback `id: null` 潛在 bug**（2026-05-25 已修、Task 3 並行 hotfix）：`script.js:163-166` 加 `!m.id` 防呆、改 fallback 走 toast「家族資料還在連線、請重新整理頁面再試」、不再跳 `member.html?id=null`
 - **Task 1 Step 4 L1 暫停同筆從頭播**：點 ⏸ 暫停後再點 ▶ 同一筆會重新 fetch + 從頭播(不接續上次位置)。簡單實作、6/15 前可接受、之後可改進(暫存 audio.src 或 currentTime)
 - **Task 1 Step 4 L2 試聽 + 清單可同時發聲**:M1 拍板獨立 `playbackAudio` + `recordingsAudio`、罕見情境(剛錄完試聽中又滑去點過去錄音)會兩聲共存。獨立的代價、不修
 

@@ -161,7 +161,11 @@ async function renderStories(members) {
     `;
 
     story.addEventListener("click", () => {
-      // 跳轉到該成員的個人頁面 (member.html 由 Claude Code 建立中)
+      if (!m.id) {
+        // Hotfix:Firestore 連不上時 fallback 走 demo data(id: null)、防止跳 member.html?id=null 撞錯誤畫面
+        showToast("家族資料還在連線、請重新整理頁面再試");
+        return;
+      }
       window.location.href = `member.html?id=${m.id}`;
     });
 
