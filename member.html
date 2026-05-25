@@ -698,6 +698,13 @@
       return id;
     }
 
+    // Task 3 子步 3c:「我是誰」localStorage 持久 + members cache(lazy load 第一次留言時撈)
+    // M_R1 拍板:member.html 自己寫簡化版、不抽 module(Task 5 整理 Feed 時自然有 common module 需求再 dedup)
+    const ME_KEY = "istanda_me_id";
+    let myCachedMembers = [];
+    function getMyId()  { return localStorage.getItem(ME_KEY); }
+    function setMyId(id) { localStorage.setItem(ME_KEY, id); }
+
     function showError(title, msg) {
       document.getElementById("appContent").hidden = true;
       if (title) document.getElementById("errorTitle").textContent = title;
@@ -1478,10 +1485,151 @@
       }
     }
 
+    /* 子步 3c:「我是誰」modal + 送出留言 + 樂觀更新(失敗 rollback) */
+
+    async function ensureMembersLoaded() {
+      if (myCachedMembers.length > 0) return myCachedMembers;
+      const snap = await getDocs(collection(db, "members"));
+      myCachedMembers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return myCachedMembers;
+    }
+
+    function openIdentityModalLocal(onPick) {
+      // 簡化版、複用 style.css 的 .identity-modal__* 樣式(M_R1 拍板)
+      const existing = document.getElementById("identityModal");
+      if (existing) existing.remove();
+
+      const modal = document.createElement("div");
+      modal.id = "identityModal";
+      modal.className = "identity-modal";
+      modal.innerHTML = `
+        <div class="identity-modal__backdrop"></div>
+        <div class="identity-modal__panel">
+          <div class="identity-modal__header">
+            <div class="identity-modal__title">你是誰?</div>
+            <div class="identity-modal__sub">選擇之後、這支手機就會記住你</div>
+          </div>
+          <div class="identity-modal__list" id="identityList"></div>
+          <button class="identity-modal__cancel" id="identityCancel">取消</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const list = modal.querySelector("#identityList");
+      myCachedMembers.forEach(m => {
+        const fallbackInitials = (m.name || "??").slice(0, 2).toUpperCase();
+        const row = document.createElement("button");
+        row.className = "identity-row";
+        row.innerHTML = `
+          <div class="identity-row__avatar">${escapeHtml(m.initials || fallbackInitials)}</div>
+          <div class="identity-row__text">
+            <div class="identity-row__name">${escapeHtml(m.name || "(未命名)")}</div>
+            ${m.nickname ? `<div class="identity-row__nick">${escapeHtml(m.nickname)}</div>` : ""}
+          </div>
+        `;
+        row.addEventListener("click", () => {
+          setMyId(m.id);
+          modal.remove();
+          if (typeof onPick === "function") onPick(m);
+        });
+        list.appendChild(row);
+      });
+
+      modal.querySelector("#identityCancel").addEventListener("click", () => modal.remove());
+      modal.querySelector(".identity-modal__backdrop").addEventListener("click", () => modal.remove());
+    }
+
+    // 沒選過「我」就點輸入框 → 開 modal、選完 focus 回 input(Q2 拍板留言觸發 modal)
+    commentInput.addEventListener("focus", async () => {
+      if (getMyId()) return; // 已選過、不擋
+      commentInput.blur(); // 收 focus、避免手機鍵盤已彈出蓋住 modal
+      await ensureMembersLoaded();
+      if (myCachedMembers.length === 0) {
+        showToast("家族成員載入失敗、請重試");
+        return;
+      }
+      openIdentityModalLocal(() => {
+        setTimeout(() => commentInput.focus(), 50);
+      });
+    });
+
+    async function submitComment(text, authorMemberId, authorName) {
+      const fileId = currentCommentFileId;
+      if (!fileId) return;
+      const row = allRecordings.find(r => r.fileId === fileId);
+      if (!row) return;
+
+      const deviceId = getDeviceId();
+      const newComment = {
+        deviceId,
+        memberId: authorMemberId,
+        authorName,
+        text,
+        createdAt: new Date()  // arrayUnion 不接 serverTimestamp、用 client Date(6/15 接受)
+      };
+
+      // 樂觀更新
+      const prevComments = row.comments || [];
+      row.comments = [...prevComments, newComment];
+      updateRowComments(fileId, row.comments);
+      commentInput.value = "";
+      commentSubmit.disabled = true;
+
+      try {
+        const q = query(
+          collection(db, "recordings"),
+          where("memberId", "==", memberId),
+          where("fileId", "==", fileId)
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) throw new Error("找不到對應 recordings 文件");
+        const docRef = snap.docs[0].ref;
+        await updateDoc(docRef, { comments: arrayUnion(newComment) });
+        // 成功:onSnapshot 推送 server 端 comments、updateRowComments re-render
+      } catch (err) {
+        console.error("送出留言失敗、rollback:", err);
+        row.comments = prevComments;
+        updateRowComments(fileId, row.comments);
+        commentInput.value = text; // 還原文字、用戶不必重打
+        showToast("⚠ 送出失敗、請重試", 2500);
+      } finally {
+        commentSubmit.disabled = false;
+      }
+    }
+
     commentCloseBtn.addEventListener("click", closeCommentSheet);
     commentBackdrop.addEventListener("click", closeCommentSheet);
-    commentSubmit.addEventListener("click", () => {
-      showToast("送出功能子步 3c 接、現在還不能按", 2200);
+    commentSubmit.addEventListener("click", async () => {
+      const text = commentInput.value.trim();
+      if (!text) return;
+      if (!currentCommentFileId) return;
+
+      const myId = getMyId();
+      if (!myId) {
+        // 沒選過「我」(可能直接點送出沒先 tap input)→ 開 modal、選完繼續送
+        await ensureMembersLoaded();
+        if (myCachedMembers.length === 0) {
+          showToast("家族成員載入失敗、請重試");
+          return;
+        }
+        openIdentityModalLocal((picked) => {
+          const name = picked.name || picked.nickname || "(未命名)";
+          submitComment(text, picked.id, name);
+        });
+        return;
+      }
+
+      const me = myCachedMembers.find(m => m.id === myId);
+      if (!me) {
+        // myId 在 localStorage、但 members cache 沒、確保 members loaded 再 retry
+        await ensureMembersLoaded();
+        const me2 = myCachedMembers.find(m => m.id === myId);
+        const name = me2 ? (me2.name || me2.nickname || "(未命名)") : "(家人)";
+        submitComment(text, myId, name);
+        return;
+      }
+      const name = me.name || me.nickname || "(未命名)";
+      submitComment(text, myId, name);
     });
 
     main();
