@@ -248,7 +248,7 @@
     }
     .progress-toast__fill--error { background: var(--like-red); }
 
-    /* ===== 過去錄音清單 placeholder (Step 4 才實作) ===== */
+    /* ===== 過去錄音清單(子步 4a:fetch + render + Hero N 改用清單長度)===== */
     .recordings-section {
       max-width: var(--max-w);
       margin: 0 auto;
@@ -260,6 +260,52 @@
       padding: 24px 0;
       font-size: 13px;
       color: var(--text-muted);
+    }
+    .recording-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .recording-row:last-child { border-bottom: none; }
+    .recording-row__icon {
+      font-size: 22px;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+    .recording-row__text {
+      flex: 1;
+      min-width: 0;
+    }
+    .recording-row__date {
+      font-size: 14px;
+      color: var(--text);
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .recording-row__index {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    /* 黑色圓形播放鈕(spec line 158)、子步 4b 接實際播放邏輯 */
+    .recording-row__play {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--text);
+      color: var(--bg-elevated);
+      display: flex; align-items: center; justify-content: center;
+      border: none;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+      transition: transform 0.15s, background 0.25s;
+    }
+    .recording-row__play:active { transform: scale(0.92); }
+    .recording-row__play svg {
+      width: 14px; height: 14px;
+      fill: currentColor;
     }
 
     /* ===== 友善錯誤畫面 ===== */
@@ -359,10 +405,12 @@
         <div class="playback-hint" id="playbackHint">錄好了、確認後上傳</div>
       </section>
 
-      <!-- 過去錄音清單 placeholder (Step 4 才實作) -->
+      <!-- 過去錄音清單(子步 4a:fetch ?action=list + render、子步 4b 接播放)-->
       <section class="recordings-section">
         <div class="section-title">過去錄音</div>
-        <div class="recordings-empty">清單載入中… (Step 4)</div>
+        <div id="recordingsList">
+          <div class="recordings-empty">清單載入中…</div>
+        </div>
       </section>
 
     </main>
@@ -477,6 +525,7 @@
           return;
         }
         renderHero(snap.data());
+        loadRecordings(); // 子步 4a:fire-and-forget、不阻塞渲染、清單載入後覆蓋 Hero N
       } catch (err) {
         console.error(err);
         showError("連線出問題", "讀不到家族資料,請檢查網路後重新整理。");
@@ -816,6 +865,7 @@
 
         showProgressToast("success", 100);  // 子步 3c.3:100% + 1.5 秒自動淡出
         hidePlayback(); // 試聽區消失、回 idle
+        loadRecordings(); // 子步 4a:reload 清單、新錄音立刻出現在最上面、N 隨之 +1 並對齊真實
 
       } catch (err) {
         console.error("上傳失敗:", err);
@@ -830,6 +880,72 @@
     }
 
     uploadBtn.addEventListener("click", handleUpload);
+
+    /* ============================================================
+       子步 4a:過去錄音清單 fetch + render + Hero N 改用清單長度
+       Q5 拍板:個人頁 N 用清單長度為真(recordCount 仍雙寫但首頁卡片才讀)
+       ============================================================ */
+
+    const recordingsList = document.getElementById("recordingsList");
+    let allRecordings = []; // 子步 4b 播放時要用 filename 推 mimeType
+
+    function parseFilenameToDate(filename) {
+      // 格式:{memberId}_MMDDHHMM.ext → MM/DD HH:MM
+      const m = (filename || "").match(/_(\d{2})(\d{2})(\d{2})(\d{2})\./);
+      if (!m) return "";
+      const [, mm, dd, hh, min] = m;
+      return `${mm}/${dd} ${hh}:${min}`;
+    }
+
+    async function loadRecordings() {
+      try {
+        const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+        const data = await resp.json();
+        const items = data[memberId] || [];
+        // 排序同子步 3c.2:filename desc(時間戳大=新)、tiebreak fileId desc
+        items.sort((a, b) => {
+          const fnCmp = (b.filename || "").localeCompare(a.filename || "");
+          if (fnCmp !== 0) return fnCmp;
+          return (b.fileId || "").localeCompare(a.fileId || "");
+        });
+        allRecordings = items;
+        renderRecordings(items);
+        // Q5 拍板:Hero N 改用清單長度為真、覆蓋 renderHero 寫的 recordCount
+        localRecordCount = items.length;
+        document.getElementById("heroCount").textContent = `${localRecordCount} 則錄音`;
+      } catch (err) {
+        console.error("loadRecordings 失敗:", err);
+        recordingsList.innerHTML = `<div class="recordings-empty">⚠ 載入失敗、請重新整理</div>`;
+      }
+    }
+
+    function renderRecordings(items) {
+      if (items.length === 0) {
+        recordingsList.innerHTML = `<div class="recordings-empty">還沒有錄音、按上面麥克風錄第一段吧</div>`;
+        return;
+      }
+      recordingsList.innerHTML = "";
+      const total = items.length;
+      items.forEach((item, idx) => {
+        const ordinal = total - idx; // 最上面 = 第 N 段(最新)、最下面 = 第 1 段
+        const row = document.createElement("div");
+        row.className = "recording-row";
+        row.innerHTML = `
+          <div class="recording-row__icon">🎵</div>
+          <div class="recording-row__text">
+            <div class="recording-row__date">${parseFilenameToDate(item.filename)}</div>
+            <div class="recording-row__index">第 ${ordinal} 段錄音</div>
+          </div>
+          <button class="recording-row__play" aria-label="播放第 ${ordinal} 段">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        `;
+        row.querySelector(".recording-row__play").addEventListener("click", () => {
+          showToast("播放功能子步 4b 接、現在還不能按", 2200);
+        });
+        recordingsList.appendChild(row);
+      });
+    }
 
     main();
   </script>
