@@ -474,6 +474,10 @@
       padding: 2px 4px;
     }
     .comment-sheet__identity-switch:hover { color: var(--text); }
+
+    /* fix:留言 Sheet 開著時(z-index 1200)、「我是誰」modal 要蓋過 Sheet。
+       style.css 內 .identity-modal z-index: 100 對首頁夠、member.html 需 override */
+    .identity-modal { z-index: 1300; }
     .recording-row__icon {
       font-size: 22px;
       flex-shrink: 0;
