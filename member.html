@@ -443,6 +443,37 @@
     }
     .comment-sheet__submit:active { transform: scale(0.96); }
     .comment-sheet__submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Task 3 收尾:留言時切換身份(「不是我?」入口) */
+    .comment-sheet__identity {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px 0;
+    }
+    .comment-sheet__identity-pill {
+      background: var(--bg-soft);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .comment-sheet__identity-pill:hover { background: var(--border); }
+    .comment-sheet__identity-suffix { color: var(--text-muted); }
+    .comment-sheet__identity-switch {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 2px 4px;
+    }
+    .comment-sheet__identity-switch:hover { color: var(--text); }
     .recording-row__icon {
       font-size: 22px;
       flex-shrink: 0;
@@ -652,6 +683,12 @@
         <button class="comment-sheet__close" aria-label="關閉">✕</button>
       </div>
       <div class="comment-sheet__list" id="commentList"></div>
+      <div class="comment-sheet__identity" id="commentIdentity" hidden>
+        <button class="comment-sheet__identity-pill" id="commentIdentityPill">
+          <span id="commentIdentityName">家人</span><span class="comment-sheet__identity-suffix"> 留言中</span>
+        </button>
+        <button class="comment-sheet__identity-switch" id="commentIdentitySwitch">不是我?</button>
+      </div>
       <div class="comment-sheet__input-row">
         <textarea class="comment-sheet__input" id="commentInput" placeholder="說點什麼…" rows="1"></textarea>
         <button class="comment-sheet__submit" id="commentSubmit" aria-label="送出">送出</button>
@@ -1406,22 +1443,54 @@
        拍板對應:Q3 下滑 70% 高、標題 + 列表 + 輸入框、Bottom Sheet 概念
        ============================================================ */
 
-    const commentSheet     = document.getElementById("commentSheet");
-    const commentList      = document.getElementById("commentList");
-    const commentInput     = document.getElementById("commentInput");
-    const commentSubmit    = document.getElementById("commentSubmit");
-    const commentCloseBtn  = commentSheet.querySelector(".comment-sheet__close");
-    const commentBackdrop  = commentSheet.querySelector(".comment-sheet__backdrop");
+    const commentSheet           = document.getElementById("commentSheet");
+    const commentList            = document.getElementById("commentList");
+    const commentInput           = document.getElementById("commentInput");
+    const commentSubmit          = document.getElementById("commentSubmit");
+    const commentCloseBtn        = commentSheet.querySelector(".comment-sheet__close");
+    const commentBackdrop        = commentSheet.querySelector(".comment-sheet__backdrop");
+    const commentIdentity        = document.getElementById("commentIdentity");
+    const commentIdentityName    = document.getElementById("commentIdentityName");
+    const commentIdentityPill    = document.getElementById("commentIdentityPill");
+    const commentIdentitySwitch  = document.getElementById("commentIdentitySwitch");
 
     let currentCommentFileId = null;
 
-    function openCommentSheet(fileId) {
+    function updateIdentityPill() {
+      const myId = getMyId();
+      if (!myId) { commentIdentity.hidden = true; return; }
+      const me = myCachedMembers.find(m => m.id === myId);
+      if (!me)   { commentIdentity.hidden = true; return; }
+      commentIdentityName.textContent = me.name || me.nickname || "(未命名)";
+      commentIdentity.hidden = false;
+    }
+
+    async function switchIdentity() {
+      await ensureMembersLoaded();
+      if (myCachedMembers.length === 0) { showToast("家族成員載入失敗、請重試"); return; }
+      openIdentityModalLocal(() => {
+        updateIdentityPill();
+        setTimeout(() => commentInput.focus(), 50);
+      });
+    }
+
+    commentIdentityPill.addEventListener("click", switchIdentity);
+    commentIdentitySwitch.addEventListener("click", switchIdentity);
+
+    async function openCommentSheet(fileId) {
       const row = allRecordings.find(r => r.fileId === fileId);
       if (!row) return;
       currentCommentFileId = fileId;
       renderComments(row.comments || []);
       commentInput.value = "";
       commentSheet.hidden = false;
+      // 已選過「我」→ ensure members cache、顯示身份 pill;沒選過 → pill hidden
+      if (getMyId()) {
+        await ensureMembersLoaded();
+        updateIdentityPill();
+      } else {
+        commentIdentity.hidden = true;
+      }
     }
 
     function closeCommentSheet() {
@@ -1549,6 +1618,7 @@
         return;
       }
       openIdentityModalLocal(() => {
+        updateIdentityPill();
         setTimeout(() => commentInput.focus(), 50);
       });
     });
@@ -1613,6 +1683,7 @@
           return;
         }
         openIdentityModalLocal((picked) => {
+          updateIdentityPill();
           const name = picked.name || picked.nickname || "(未命名)";
           submitComment(text, picked.id, name);
         });
