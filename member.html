@@ -261,14 +261,57 @@
       font-size: 13px;
       color: var(--text-muted);
     }
+    /* 子步 3a:雙行 row(M_R3 B 拍板 IG / FB 風格)*/
     .recording-row {
       display: flex;
-      align-items: center;
-      gap: 12px;
+      flex-direction: column;
       padding: 12px 0;
       border-bottom: 1px solid var(--border);
     }
     .recording-row:last-child { border-bottom: none; }
+    .recording-row__top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .recording-row__bottom {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      padding-left: 34px; /* 對齊上行 🎵 icon + gap */
+    }
+    /* 子步 3a:❤️ / 💬 互動鈕、整個 button 都是 tap 區(M_R3 加分) */
+    .recording-row__action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.15s;
+      font-variant-numeric: tabular-nums;
+    }
+    .recording-row__action:hover { background: var(--bg-soft); }
+    .recording-row__action:active { transform: scale(0.96); }
+    .recording-row__action svg {
+      width: 18px; height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linejoin: round;
+    }
+    /* ❤️ 按讚:idle 灰外框、liked 紅實心(IG 經典 var(--like-red))*/
+    .recording-row__like--liked {
+      color: var(--like-red);
+    }
+    .recording-row__like--liked svg {
+      fill: var(--like-red);
+      stroke: var(--like-red);
+    }
     .recording-row__icon {
       font-size: 22px;
       flex-shrink: 0;
@@ -473,8 +516,9 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
     import {
-      getFirestore, doc, getDoc,
-      collection, addDoc, updateDoc, serverTimestamp, increment
+      getFirestore, doc, getDoc, getDocs,
+      collection, addDoc, updateDoc, serverTimestamp, increment,
+      query, where, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -495,6 +539,17 @@
     // Module-level state(子步 3c 上傳邏輯要用)
     let memberId = null;          // main() 從 URL 拿
     let localRecordCount = 0;     // renderHero init、上傳成功本地 +1(N2 拍板)
+
+    // Task 3 子步 3a:deviceId(防按讚重複按、跟「我是誰」分開)
+    const DEVICE_ID_KEY = "istanda_device_id";
+    function getDeviceId() {
+      let id = localStorage.getItem(DEVICE_ID_KEY);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+      return id;
+    }
 
     function showError(title, msg) {
       document.getElementById("appContent").hidden = true;
@@ -534,7 +589,8 @@
           return;
         }
         renderHero(snap.data());
-        loadRecordings(); // 子步 4a:fire-and-forget、不阻塞渲染、清單載入後覆蓋 Hero N
+        loadRecordings();           // 子步 4a:Apps Script 初始一次性 load(F_R2 拍板)
+        setupRecordingsListener();  // 子步 3a:onSnapshot 接管後續更新(likes / comments / 新文件)
       } catch (err) {
         console.error(err);
         showError("連線出問題", "讀不到家族資料,請檢查網路後重新整理。");
@@ -874,7 +930,7 @@
 
         showProgressToast("success", 100);  // 子步 3c.3:100% + 1.5 秒自動淡出
         hidePlayback(); // 試聽區消失、回 idle
-        loadRecordings(); // 子步 4a:reload 清單、新錄音立刻出現在最上面、N 隨之 +1 並對齊真實
+        // 子步 3a F_R2 拍板:不再 call loadRecordings、靠 onSnapshot 推送新文件(避免雙 fetch race)
 
       } catch (err) {
         console.error("上傳失敗:", err);
@@ -935,20 +991,35 @@
       }
       recordingsList.innerHTML = "";
       const total = items.length;
+      const myDeviceId = getDeviceId();
       items.forEach((item, idx) => {
         const ordinal = total - idx; // 最上面 = 第 N 段(最新)、最下面 = 第 1 段
+        const likes = item.likes || [];
+        const liked = likes.includes(myDeviceId);
         const row = document.createElement("div");
         row.className = "recording-row";
+        row.dataset.fileId = item.fileId; // 子步 3a onSnapshot 用、partial update 不重 render 整 row
         row.innerHTML = `
-          <div class="recording-row__icon">🎵</div>
-          <div class="recording-row__text">
-            <div class="recording-row__date">${parseFilenameToDate(item.filename)}</div>
-            <div class="recording-row__index">第 ${ordinal} 段錄音</div>
+          <div class="recording-row__top">
+            <div class="recording-row__icon">🎵</div>
+            <div class="recording-row__text">
+              <div class="recording-row__date">${parseFilenameToDate(item.filename)}</div>
+              <div class="recording-row__index">第 ${ordinal} 段錄音</div>
+            </div>
+            <button class="recording-row__play" aria-label="播放第 ${ordinal} 段">▶</button>
           </div>
-          <button class="recording-row__play" aria-label="播放第 ${ordinal} 段">▶</button>
+          <div class="recording-row__bottom">
+            <button class="recording-row__action recording-row__like ${liked ? 'recording-row__like--liked' : ''}" aria-label="按讚第 ${ordinal} 段">
+              <svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-9C.5 8 3 4 7 4c2 0 3.5 1 5 3 1.5-2 3-3 5-3 4 0 6.5 4 4.5 8-2.5 4.5-9.5 9-9.5 9z"/></svg>
+              <span class="recording-row__like-count">${likes.length}</span>
+            </button>
+          </div>
         `;
         row.querySelector(".recording-row__play").addEventListener("click", (e) => {
           playRecording(item.fileId, item.filename, e.currentTarget);
+        });
+        row.querySelector(".recording-row__like").addEventListener("click", (e) => {
+          handleLikeToggle(item.fileId, e.currentTarget);
         });
         recordingsList.appendChild(row);
       });
@@ -1048,6 +1119,124 @@
         currentPlayingFileId = null;
       }
     });
+
+    /* ============================================================
+       Task 3 子步 3a:按讚 ❤️ + onSnapshot 即時同步
+       拍板對應:M_R1 modal 後續做 / M_R2 query+where 篩 memberId / M_R3 雙行 row
+       F_R2 拍板:loadRecordings 只初始一次、後續全靠 onSnapshot 推送
+       ============================================================ */
+
+    let recordingsListenerUnsub = null;
+
+    async function handleLikeToggle(fileId, btn) {
+      const myDeviceId = getDeviceId();
+      const row = allRecordings.find(r => r.fileId === fileId);
+      if (!row) return;
+
+      // 找 Firestore 對應 doc(用 fileId query、子步 3c 寫入時 fileId 是 unique)
+      // 走 query memberId+fileId 比較穩
+      const q = query(
+        collection(db, "recordings"),
+        where("memberId", "==", memberId),
+        where("fileId", "==", fileId)
+      );
+
+      const currentLikes = row.likes || [];
+      const wasLiked = currentLikes.includes(myDeviceId);
+
+      // 樂觀更新:UI 立刻 toggle、count 先 ±1
+      const nextLikes = wasLiked
+        ? currentLikes.filter(id => id !== myDeviceId)
+        : [...currentLikes, myDeviceId];
+      row.likes = nextLikes;
+      updateRowLikes(fileId, nextLikes);
+
+      try {
+        // 撈該文件 docId(子步 3a 用 query+getDocs、Task 5 之後 onSnapshot 會 cache docId 在 row 上避免重查)
+        const snap = await getDocs(q);
+        if (snap.empty) throw new Error("找不到對應 recordings 文件");
+        const docRef = snap.docs[0].ref;
+        await updateDoc(docRef, {
+          likes: wasLiked ? arrayRemove(myDeviceId) : arrayUnion(myDeviceId)
+        });
+        // 成功:onSnapshot 會推送 server 端確認後的 likes、UI 跟 server 同步
+      } catch (err) {
+        console.error("按讚失敗、rollback:", err);
+        // Rollback:還原 likes 跟 UI
+        row.likes = currentLikes;
+        updateRowLikes(fileId, currentLikes);
+        showToast("⚠ 按讚失敗、請重試", 2500);
+      }
+    }
+
+    function updateRowLikes(fileId, likes) {
+      // M_R2 拍板 partial DOM update、不重 render 整個 row 避免 flicker
+      const rowEl = recordingsList.querySelector(`[data-file-id="${fileId}"]`);
+      if (!rowEl) return;
+      const myDeviceId = getDeviceId();
+      const liked = (likes || []).includes(myDeviceId);
+      const likeBtn = rowEl.querySelector(".recording-row__like");
+      const likeCount = rowEl.querySelector(".recording-row__like-count");
+      if (likeBtn) likeBtn.classList.toggle("recording-row__like--liked", liked);
+      if (likeCount) likeCount.textContent = (likes || []).length;
+    }
+
+    function setupRecordingsListener() {
+      // 拆掉舊 listener(切換 member 才會發生、目前不會、防呆)
+      if (recordingsListenerUnsub) { recordingsListenerUnsub(); recordingsListenerUnsub = null; }
+      const q = query(
+        collection(db, "recordings"),
+        where("memberId", "==", memberId)
+      );
+      recordingsListenerUnsub = onSnapshot(q, (snap) => {
+        let listChanged = false;
+        snap.docChanges().forEach((change) => {
+          const data = change.doc.data();
+          const fileId = data.fileId;
+          if (!fileId) return;
+          if (change.type === "added") {
+            // 新文件:檢查 allRecordings 有沒有(初始 loadRecordings 撈過會有、新上傳的不會)
+            let row = allRecordings.find(r => r.fileId === fileId);
+            if (!row) {
+              allRecordings.push({
+                fileId,
+                filename: data.filename || "",
+                likes: data.likes || [],
+                comments: data.comments || []
+              });
+              listChanged = true;
+            } else {
+              // 既有 row、合 likes / comments 進來
+              row.likes = data.likes || [];
+              row.comments = data.comments || [];
+              updateRowLikes(fileId, row.likes);
+            }
+          } else if (change.type === "modified") {
+            const row = allRecordings.find(r => r.fileId === fileId);
+            if (row) {
+              row.likes = data.likes || [];
+              row.comments = data.comments || [];
+              updateRowLikes(fileId, row.likes);
+            }
+          } else if (change.type === "removed") {
+            // 6/15 前不會發生(沒刪除功能)、先不處理
+          }
+        });
+        if (listChanged) {
+          // 新文件加入、重新排序 + render(子步 3a 不接 comments、子步 3c 補)
+          allRecordings.sort((a, b) => {
+            const fnCmp = (b.filename || "").localeCompare(a.filename || "");
+            if (fnCmp !== 0) return fnCmp;
+            return (b.fileId || "").localeCompare(a.fileId || "");
+          });
+          renderRecordings(allRecordings);
+          localRecordCount = allRecordings.length;
+          document.getElementById("heroCount").textContent = `${localRecordCount} 則錄音`;
+        }
+      }, (err) => {
+        console.error("onSnapshot 失敗:", err);
+      });
+    }
 
     main();
   </script>
