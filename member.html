@@ -647,19 +647,45 @@
         }
 
         const filename = `${memberId}.${recordedExt}`;
-        const resp = await fetch(APPS_SCRIPT_URL, {
+
+        // POST blind:Apps Script web app POST 跨域 redirect 到 googleusercontent.com、
+        // 瀏覽器擋 redirect 後的 response body、resp.json() 拿到的 data.fileId 是 undefined。
+        // 已實測泰雅語 App 同套 workaround:不解析 response、信任 Drive 端寫入、由下面 GET list 撈 fileId。
+        await fetch(APPS_SCRIPT_URL, {
           method: "POST",
           body: JSON.stringify({ audio: base64, filename })
         });
-        const data = await resp.json();
 
-        if (!data.ok) throw new Error(data.error || "Apps Script 回 ok=false");
+        // GET ?action=list 撈剛寫入的 fileId(GET 跨域 redirect 行為 CORS 友善、能拿 response body)
+        const listResp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+        const listData = await listResp.json();
+        const myFiles = listData[memberId] || [];
+
+        // edge case B:撈不到 memberId 下任何檔 → POST 可能真的失敗、走 catch 讓用戶重試
+        if (myFiles.length === 0) {
+          throw new Error("Apps Script list 撈不到 memberId 的檔案、POST 可能失敗");
+        }
+
+        // 取最新:filename desc(時間戳 _MMDDHHMM 大=新)、
+        // edge case A:同時間戳 tiebreak 用 fileId desc(Drive 唯一 ID、永遠 deterministic)
+        myFiles.sort((a, b) => {
+          const fnCmp = (b.filename || "").localeCompare(a.filename || "");
+          if (fnCmp !== 0) return fnCmp;
+          return (b.fileId || "").localeCompare(a.fileId || "");
+        });
+        const latest = myFiles[0];
+
+        // edge case B':防 Apps Script list schema 變更導致欄位缺失
+        if (!latest.fileId || !latest.filename) {
+          throw new Error("Apps Script list 回的 latest 缺 fileId 或 filename");
+        }
 
         // 寫 Firestore recordings(N1 拍板:likes/comments 直接寫新格式 array)
+        // 已知限制 R1:同一 member 兩支裝置同分鐘錄會 race、87 人家族短期不會發生、6/15 後再處理
         await addDoc(collection(db, "recordings"), {
           memberId,
-          fileId: data.fileId,
-          filename: data.filename,
+          fileId: latest.fileId,
+          filename: latest.filename,
           mimeType: recordedBlob.type,
           createdAt: serverTimestamp(),
           likes: [],     // Task 3 拍板:array of deviceId(代替原 spec 預留的 number)
