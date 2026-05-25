@@ -81,11 +81,19 @@
 - [x] 線上實機驗證:錄→試聽→重錄→上傳→Drive + Firestore + recordCount 雙寫 + Hero N 本地 +1 + 進度橫條動畫
 - [x] 下一步:Step 4 過去錄音清單 + Hero N 改用清單長度
 
+### Task 1 Step 4 過去錄音清單完成（2026-05-25、2 個 commits / 2 個子步）
+- [x] 子步 4a `1cf8551` 清單 fetch + render + Hero N 改用清單長度（Q5 拍板「個人頁顯示用清單長度為真」)、上傳成功後自動 reload 清單(新錄音立刻出現)
+- [x] 子步 4b `1bc688d` 點播放 / 暫停 / 切換(獨立 `recordingsAudio` 跟試聽 `playbackAudio` 分開、載入「⌛」disabled + 5 秒慢網 toast、互斥邏輯同時只播一個)
+- [x] F1 實測:`?id=fileId` 回**純 base64 string**(無 JSON 包裝、無 dataURL prefix)、用 `resp.text()` 拿、組 dataURL 用 `pickMimeFromFilename` 從 filename 後綴判斷 mime
+- [x] 線上實機驗證:F5 看到清單、上傳新錄音立刻出現、點 ▶ → ⌛ → ⏸ 跑通、切換不同筆互斥、播完自動回 ▶
+- [x] 已知限制:**L1** 暫停同筆再播從頭來(不接續位置、6/15 前可接受)、**L2** 試聽+清單可同時發聲(M1 獨立 audio 的代價、罕見、不修)
+- [x] 下一步:Step 5 DoD 12 項自測
+
 ---
 
 ## 🔄 進行中
 
-- [ ] **Task 1：個人頁面 member.html**（Step 1 ✅ Apps Script、Step 2 ✅ Hero、Step 3 ✅ 錄音核心(2026-05-25 完成、5 個 commits)、Step 4-5 待動工、規格見 `specs/task-recording-core.md`）
+- [ ] **Task 1：個人頁面 member.html**（Step 1-4 全部 ✅(2026-05-25 完成、7 個 commits)、Step 5 DoD 12 項自測待跑、規格見 `specs/task-recording-core.md`）
 
 ---
 
@@ -201,6 +209,9 @@ recordings/{自動ID}/
 - **`?action=list` 全撈無篩選**：現在 2 人 OK、6/15 後膨脹到幾百筆會浪費流量，標為 TODO、6/15 後優化（加 `?memberId=xxx` 參數過濾）
 - **MediaRecorder 在 file:// 拿不到麥克風**：A 階段自測直接 push 到 main 線上測，反正沒家人在用
 - **首頁 demo fallback `id: null` 潛在 bug**：`script.js:408-411` Firestore 連不上時 fallback 用 demo data、`id: null`、點圈圈會跳 `member.html?id=null`。實際不會走到(已有 2 筆 seed)、Task 3 寫 Firestore 即時 listener 時順手收掉(改成 fallback 走「請稍候重連」或 disable click)
+- **`/favicon.ico` 404**：HTML 沒設 `<link rel="icon">`、repo 也沒 favicon.ico、瀏覽器預設請求得 404。零功能影響、Console 一條紅字。6/15 緩衝週做 App icon / Task 6 PWA(manifest.json + 圖示)時一併處理
+- **Task 1 Step 4 L1 暫停同筆從頭播**：點 ⏸ 暫停後再點 ▶ 同一筆會重新 fetch + 從頭播(不接續上次位置)。簡單實作、6/15 前可接受、之後可改進(暫存 audio.src 或 currentTime)
+- **Task 1 Step 4 L2 試聽 + 清單可同時發聲**:M1 拍板獨立 `playbackAudio` + `recordingsAudio`、罕見情境(剛錄完試聽中又滑去點過去錄音)會兩聲共存。獨立的代價、不修
 
 ---
 
@@ -261,6 +272,13 @@ recordings/{自動ID}/
 - **子步 3c.2** `ccb8a2b` 修補:31 insertions / 5 deletions、Firestore 雙寫終於成功
 - **子步 3c.3** `2eb7aed` 加 UX 進度橫條:聖瑱師選四方案中的 2 號(IG / Twitter 熟悉感、對齊 v2 視覺定位)、四段式視覺回饋(編碼 15% → 上傳 55% → 確認 85% → 寫入 95% → 100% 淡出、失敗變紅)
 - **下一步**:Step 4(過去錄音清單 + Hero N 改用清單長度)
+
+### 2026-05-25(晚):Task 1 Step 4 過去錄音清單 + 播放完成
+- **子步 4a** `1cf8551` 清單 fetch + render + Hero N 改用清單長度(Q5 拍板「個人頁顯示用清單長度為真」)、上傳成功 hook reload 清單(新錄音立刻出現)
+- **子步 4b** `1bc688d` 點播放 / 暫停 / 切換(獨立 `recordingsAudio` 跟試聽 `playbackAudio` 分開避免 cross-state)、載入「⌛」disabled + 5 秒慢網 toast(M2 加分長輩友善)、互斥邏輯同時只播一個、播完自動回 ▶
+- **F1 實測結果**:`?id=fileId` 回**純 base64 string**(無 JSON 包裝、無 dataURL prefix)、用 `resp.text()` 拿、組 dataURL `data:${mime};base64,${base64}`、mime 從 filename 後綴判斷(`.webm` / `.mp4`、fallback `audio/webm`)
+- **拍板對應**:M1 獨立兩個 audio element(試聽 / 清單獨立)、M2 ⌛ disabled + 5 秒 toast、M3 filename 後綴判斷 mime
+- **下一步**:Step 5 DoD 12 項自測(線上、聖瑱師親跑)、PASS 後 Task 1 整段完成、進 Task 3 Recon
 
 ---
 
