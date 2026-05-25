@@ -72,11 +72,20 @@
 - [x] 線上 smoke test 三顆全部 PASS：CU / TI 跳對成員 `member.html?id=...`、「我的記事」開「我是誰」modal
 - [x] Task 2 不需要寫新 code、Recon 直接歸檔
 
+### Task 1 Step 3 錄音核心完成（2026-05-25、5 個 commits / 5 個子步）
+- [x] 子步 3a `03d7e27` 錄音狀態機 + 60 秒自動停 + 權限 UX(toast 提示 + 失敗友善 fallback)
+- [x] 子步 3b `f533d8e` 試聽 / 重錄 / 上傳按鈕骨架(三鈕橫排、上傳鈕暫 disabled)
+- [x] 子步 3c `fd30203` 上傳 Apps Script + Firestore 雙寫初版(撞 Apps Script POST 跨域 redirect 坑、Firestore 空白、Drive 累積試錯檔)
+- [x] 子步 3c.2 `ccb8a2b` 修補:POST blind + GET `?action=list` 撈 fileId 回填(走 D 方案、繞跨域 redirect)
+- [x] 子步 3c.3 `2eb7aed` 上傳進度橫條 UX(四段視覺回饋:編碼 15% → 上傳 55% → 確認 85% → 寫入 95% → 100% 淡出、失敗變紅)
+- [x] 線上實機驗證:錄→試聽→重錄→上傳→Drive + Firestore + recordCount 雙寫 + Hero N 本地 +1 + 進度橫條動畫
+- [x] 下一步:Step 4 過去錄音清單 + Hero N 改用清單長度
+
 ---
 
 ## 🔄 進行中
 
-- [ ] **Task 1：個人頁面 member.html**（Step 1 ✅ Apps Script doPost 已部署回 `{ok, fileId, filename}`、Step 2 ✅ Hero 渲染 commit `2f916b2`、Step 3-5 待動工、規格見 `specs/task-recording-core.md`）
+- [ ] **Task 1：個人頁面 member.html**（Step 1 ✅ Apps Script、Step 2 ✅ Hero、Step 3 ✅ 錄音核心(2026-05-25 完成、5 個 commits)、Step 4-5 待動工、規格見 `specs/task-recording-core.md`）
 
 ---
 
@@ -242,6 +251,16 @@ recordings/{自動ID}/
 - **選擇**：走選項 A、先補完 Task 1 Step 3+4+5、再進 Task 3
 - **時程影響**：Task 3 順延一週、Task 4 也順延一週、Task 6 PWA 從「6/15 必做」改成「6/15 後候選」（6/15 上線後評估必要再做）
 - **下一步**：Task 1 Step 3 Recon（本週日晚 ~ 週一）、切 3-4 子步、下週 5/26-6/1 動工
+
+### 2026-05-25：Apps Script POST 跨域 redirect 坑、走 D 方案 + UX 進度條
+- **背景**：Task 1 子步 3c 上傳實作完、Drive 寫入成功但 Firestore 永遠空、`addDoc` throw `Unsupported field value: undefined (found in field fileId)`
+- **診斷**：Apps Script web app POST 自動 302 redirect 到 `googleusercontent.com` 子域、瀏覽器 fetch follow redirect 後 response body 被跨域擋、`await resp.json()` 拿到空物件、`data.fileId = undefined`、後續 `addDoc` 收 undefined 就 throw
+- **方案 A / B / C 評估皆否**：A(Content-Type text/plain)= 等於現狀(fetch string body 預設就是 text/plain);B(XMLHttpRequest)= 跟 fetch 同 CORS 規則;C(redirect: "manual")= 跨域 opaqueredirect 連 Location header 都讀不到
+- **選 D**：POST blind 不解析 response + GET `?action=list` 撈剛上傳的 fileId 回填 Firestore。聖瑱師另一個泰雅語 App 已實測同邏輯成功、信心增強
+- **edge case 防線**:同時間戳 tiebreak 用 fileId desc(A)、撈不到 memberId 走 throw → catch 重試(B)、latest 缺欄位再 throw(B')、同人兩裝置 race 列已知限制(R1、6/15 後再處理)
+- **子步 3c.2** `ccb8a2b` 修補:31 insertions / 5 deletions、Firestore 雙寫終於成功
+- **子步 3c.3** `2eb7aed` 加 UX 進度橫條:聖瑱師選四方案中的 2 號(IG / Twitter 熟悉感、對齊 v2 視覺定位)、四段式視覺回饋(編碼 15% → 上傳 55% → 確認 85% → 寫入 95% → 100% 淡出、失敗變紅)
+- **下一步**:Step 4(過去錄音清單 + Hero N 改用清單長度)
 
 ---
 
