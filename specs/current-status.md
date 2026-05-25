@@ -89,11 +89,20 @@
 - [x] 已知限制:**L1** 暫停同筆再播從頭來(不接續位置、6/15 前可接受)、**L2** 試聽+清單可同時發聲(M1 獨立 audio 的代價、罕見、不修)
 - [x] 下一步:Step 5 DoD 12 項自測
 
+### Task 3：按讚 + 留言 + 即時同步（2026-05-25 完成）
+- [x] 子步 3a `561a42f` 按讚 ❤️ + deviceId(localStorage 防按讚重複)+ onSnapshot 即時(`query where memberId == X`)+ 雙行 row UI(M_R3 IG/FB 風格)
+- [x] 子步 3b `1c95527` Bottom Sheet UI 殼(下滑、70% 高、上 標題+✕ / 中 列表 / 下 輸入+送出)、無寫入
+- [x] 子步 3c `0e44e9c` 留言寫入 + 「我是誰」modal 整合(M_R1 member.html 自己寫簡化版)+ 樂觀更新 + onSnapshot 接 comments
+- [x] 「不是我?」入口 `86ec340` 留言時可隨時切換身份(pill「Cina Umav 留言中」+ 「不是我?」switch、整塊 tap 重開 modal)
+- [x] modal z-index 修 `8a69258` Sheet 開著時 identity-modal z-index 1300 蓋過 Sheet 1200
+- [x] M_R4 demo fallback hotfix `ad3a5f4` `script.js:163-166` 加 `!m.id` 防呆
+- [x] 跨瀏覽器驗證 PASS:Chrome 無痕 + Edge 即時同步、留言 author 帶名字、Firestore `comments` array 正確、F5 持久
+
 ---
 
 ## 🔄 進行中
 
-- [ ] **Task 3：按讚 ❤️ + 留言 💬**（2026-05-25 Task 1 完成後接、Recon 拍板 Q1'A 個人頁清單加 UI / Q2 按讚 deviceId 不擋 + 留言觸發「我是誰」modal / Q3 Bottom Sheet、子步切分跟動工前題目待 review）
+- [ ] **Task 4：LINE 一鍵分享**（單則錄音、Web Share API、依時程表第三週 6/2-6/8 動工、Task 3 完成後直接接;或視 5/26-6/1 進度可能提早)
 
 ---
 
@@ -278,6 +287,16 @@ recordings/{自動ID}/
 - **F1 實測結果**:`?id=fileId` 回**純 base64 string**(無 JSON 包裝、無 dataURL prefix)、用 `resp.text()` 拿、組 dataURL `data:${mime};base64,${base64}`、mime 從 filename 後綴判斷(`.webm` / `.mp4`、fallback `audio/webm`)
 - **拍板對應**:M1 獨立兩個 audio element(試聽 / 清單獨立)、M2 ⌛ disabled + 5 秒 toast、M3 filename 後綴判斷 mime
 - **下一步**:Step 5 DoD 12 項自測(線上、聖瑱師親跑)、PASS 後 Task 1 整段完成、進 Task 3 Recon
+
+### 2026-05-25(晚):Task 3 完成、身份識別不走 LINE 登入
+- **背景**:留言需要識別「誰留的」、考慮過 LINE 登入
+- **拍板**:走「選一次 + ME 重選 + 留言時可改」雙路徑、不走 LINE 登入
+- **理由**:LINE 登入完成後仍需家族內身份對應(LINE 名 ≠ 布農族名)、長輩看到登入頁會放棄(`north-star.md` 寫過「登入頁 → 媽媽會在這裡放棄」)、ROI 不對
+- **防誤點機制**:留言 Sheet pill「Cina Umav 留言中 · 不是我?」隨時可改、commit `86ec340`
+- **技術細節**:`recordings.likes` = array of deviceId(localStorage 永久 UUID)、`recordings.comments` = array of `{deviceId, memberId, authorName, text, createdAt: Date}`(arrayUnion 不支援 serverTimestamp、用 client Date 6/15 接受)
+- **onSnapshot 範圍**:M_R2 拍板 `query(collection, where("memberId", "==", X))` + onSnapshot、不 listen 整 collection、流量友善
+- **6 commits**:`561a42f` / `1c95527` / `0e44e9c` / `86ec340` / `8a69258` + 並行 hotfix `ad3a5f4`
+- **下一步**:Task 4(LINE 分享單則錄音、Web Share API)
 
 ---
 
