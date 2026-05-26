@@ -1,6 +1,6 @@
 # Istanda Mapasnava — 目前進度
 
-> 最後更新：2026-05-19（v2：對齊新願景）
+> 最後更新：2026-05-26（Task 4 LINE 一鍵分享已 ship）
 > 每完成一個段落就更新這份檔案，讓下一個 Claude / Claude Code 一打開就知道現況。
 
 ---
@@ -18,9 +18,9 @@
 
 - **死線**：2026-06-15（給 87 人家族實際使用）
 - **真正的死線**：2026-06-22（一週後還有人打開）
-- **今天**：2026-05-19（剩 27 天）
-- **理論進度**：第 4 週「族語本」→ **實際進度落後 2 週**
-- **補救決策**：砍掉族語本，補回錄音核心 + 互動引擎（詳見「決策記錄」）
+- **今天**：2026-05-26（剩 20 天）
+- **理論進度**：第 4 週「族語本」→ **實際:Task 1-4 全部完成、互動引擎超前、領先時程約 2 週**
+- **補救決策**：砍掉族語本，補回錄音核心 + 互動引擎（詳見「決策記錄」）→ 已生效、剩 Task 5 Feed 一項 6/15 必做
 
 ---
 
@@ -98,11 +98,21 @@
 - [x] M_R4 demo fallback hotfix `ad3a5f4` `script.js:163-166` 加 `!m.id` 防呆
 - [x] 跨瀏覽器驗證 PASS:Chrome 無痕 + Edge 即時同步、留言 author 帶名字、Firestore `comments` array 正確、F5 持久
 
+### Task 4：LINE 一鍵分享（2026-05-26 完成、ship）
+- [x] Step 0 第二層 Recon 找到 4 處 spec 假設落差、共 10 條納入 spec 後才動工（詳見「決策記錄」2026-05-26）
+- [x] Step 1 `06ac104` 加 ↗️ 鈕(對齊 `.recording-row__action` 灰調)+ `MESSAGES` i18n-ready 結構 + `memberData` module 變數
+- [x] Step 2 `9d9d288` Web Share API(`navigator.share`)+ Popover fallback(新 `.share-sheet__*` namespace、開 LINE / 複製 / 取消)+ iOS 雙保險(text 欄位含 URL、防 iOS 13 忽略 url)
+- [x] Step 3 `5535cca` Deep link `#rec={fileId}` → `scrollIntoView` + 金邊高亮 2 秒 + F5 不重跳(立刻清 hash)
+- [x] spec 2 commits:`5b9e563` 初版 / `65a86b5` 對齊 Step 0 偵察
+- [x] DoD 16/16 驗收 PASS:桌機 Share Sheet / popover、手機 LINE 實機分享(URL 含 `#rec={fileId}`)、deep link scroll + 高亮、F5 不重跳、不存在/空 fileId 邊界、空 nickname 防呆、console 無 error
+- [x] 範圍紀律:git 證實三個 Step commit 只動 `member.html`、index.html / style.css / Apps Script 零改動
+- [x] **北極星第三題達成**:2026-05-26 14:17 訊息進家族 LINE 群組
+
 ---
 
 ## 🔄 進行中
 
-- [ ] **Task 4：LINE 一鍵分享**（單則錄音、Web Share API、依時程表第三週 6/2-6/8 動工、Task 3 完成後直接接;或視 5/26-6/1 進度可能提早)
+- [ ] **Task 5：首頁 Feed source 切到 recordings collection**（順帶解 v0 `posts` placeholder;原排第四週 6/9-6/15、Task 1-4 全部超前完成、可考慮提前到 6/2-6/8 動工)
 
 ---
 
@@ -110,24 +120,19 @@
 
 > **重排原因**：Task 3 Recon 發現 Task 1 Step 3-4 沒做、recordings 集合空無資料、Task 3 必須 block 在 Task 1 之後。詳見「📝 決策記錄」2026-05-24（晚）那筆。
 
-**本週 5/19-5/24（已過 / 部分完成）**
-- ✅ Task 2：首頁卡片可點擊跳轉到 member.html（2026-05-24 確認、實作在 v0 `c431e54`、smoke test PASS）
-- 🔄 Task 1 Step 1 ✅ Apps Script 部署 + Step 2 ✅ Hero 渲染、Step 3-5 待動工
+**5/19-5/26（已完成、進度超前約 2 週）**
+- ✅ Task 2 首頁卡片跳轉 member.html（`c431e54`、smoke test PASS）
+- ✅ Task 1 錄音核心 Step 1-5（Apps Script + Hero + 錄音狀態機 + 上傳雙寫 + 過去清單 + 播放）
+- ✅ Task 3 按讚 + 留言 + onSnapshot 即時同步（6 commits）
+- ✅ Task 4 LINE 一鍵分享（3 Step、2026-05-26 ship）
 
-**本週剩 5/24-5/25**
-- Task 1 Step 3 Recon + 切細步（不動 code、Recon only）
+**下週 5/27-6/8（Task 5 提前動工）**
+1. **Task 5：首頁 Feed source 切到 recordings collection**（順帶解 v0 `posts` placeholder）— 原排 6/9-6/15、Task 1-4 超前、提前到 6/2-6/8 動（5/27 起可先 Recon）
 
-**下週 5/26-6/1**
-1. Task 1 Step 3-5 跑完（錄音核心 + 過去清單 + DoD）
-2. Task 3 開頭（按讚 / 留言 Recon + 部分實作）
-
-**第三週 6/2-6/8**
-3. Task 3 收尾（按讚 + 留言 bottom sheet 完整）
-4. Task 4：LINE 一鍵分享（單則錄音、Web Share API）
-
-**第四週 6/9-6/15**
-5. Task 5：首頁 Feed source 切到 recordings collection（順帶解 v0 `posts` placeholder）
-- 緩衝：拍家人頭像、給 1-2 個家人試用、收回饋、修最後 bug
+**緩衝 6/9-6/15（多出來的時間、收尾 + 6/15 前必做）**
+- 🔴 **Firestore test mode 改正式規則**（6/15 前硬性必做、見「已知問題」、限家人讀寫）
+- 拍家人頭像、給 1-2 個家人試用、收回饋、修最後 bug
+- 視時間餘裕補 Task 6 PWA（原 6/15 後候選、超前的話可提前）
 - **6/15 上線** 🎉
 
 **🟡 6/15 後候選（原本 6/15 必做、現順延）**
@@ -297,6 +302,20 @@ recordings/{自動ID}/
 - **onSnapshot 範圍**:M_R2 拍板 `query(collection, where("memberId", "==", X))` + onSnapshot、不 listen 整 collection、流量友善
 - **6 commits**:`561a42f` / `1c95527` / `0e44e9c` / `86ec340` / `8a69258` + 並行 hotfix `ad3a5f4`
 - **下一步**:Task 4(LINE 分享單則錄音、Web Share API)
+
+### 2026-05-26:Task 4 LINE 一鍵分享完成、Step 0 第二層 Recon 救回 4 處 spec 落差
+- **背景**:Task 4 第一層 Recon 在 claude.ai 規劃框拍板(5+2 題)、但 spec 的程式假設沒對過實際 code、Claude Code 動工前先跑 Step 0 第二層 Recon 爬 member.html
+- **4 處 spec 假設落差**(照舊 spec 寫會生出對不上的 selector / 變數):
+  1. row attribute 是 `data-file-id`、不是 spec 假設的 `data-doc-id`
+  2. 清單身份是 `fileId`(Drive ID)、不是 Firestore docId(docId 從不存在 row 上、按讚/留言時才即時 query)→ **deep link 改用 fileId 更乾淨、render 時就有**
+  3. 快取變數叫 `allRecordings`、不是 `cachedRecordings`、item 結構沒 `.id` 欄位
+  4. `cachedMember` 根本不存在(main() 把 snap.data() 餵 renderHero 後沒留)→ 新增 `memberData` module 變數
+- **6 條建議簡化**:handleShare 不查 recording(訊息只需 member 資料)/ ↗️ 鈕對齊現有 `.recording-row__action` 灰調(不是 spec 原寫的 44×44 沉黑)/ Popover 新開 `.share-sheet__*` namespace(不複用 comment-sheet、語意+高度都不對)/ 高亮被 re-render 洗掉風險降級(partial DOM update、不重繪 row、不加保護邏輯)/ `loadRecordings` 改 await 鏈式呼叫 handleDeepLink / MESSAGES inline 在 member.html(不抽 i18n.js、YAGNI、M_R1 已立先例)
+- **流程**:共 10 條(4 落差 + 6 簡化)納入 spec、spec 推 2 commit(`5b9e563` 初版 / `65a86b5` 對齊 Step 0)對齊現實、再進 Step 1-3、**順利無返工**(規則 10 三段式生效)
+- **3 個 Step commits**:`06ac104` Step 1(↗️ 鈕 + MESSAGES + memberData)/ `9d9d288` Step 2(Web Share + popover + iOS 雙保險)/ `5535cca` Step 3(deep link scroll + 高亮 + F5 不重跳)、**全部只動 member.html**
+- **一個已知偏離**:`.share-sheet__*` CSS 放 member.html inline(跟 comment-sheet 慣例一致)、非 spec 字面的 style.css、功能無影響
+- **北極星第三題達成**:2026-05-26 14:17 訊息進家族 LINE 群組(「LINE 家族群組這週有沒有出現 App 連結?」= 有)
+- **下一步**:Task 5 首頁 Feed source 切到 recordings collection(Task 1-4 全超前、可提前到 6/2-6/8 動)
 
 ---
 
