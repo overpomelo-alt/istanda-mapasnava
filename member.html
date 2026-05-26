@@ -726,6 +726,7 @@
 
     // Module-level state(子步 3c 上傳邏輯要用)
     let memberId = null;          // main() 從 URL 拿
+    let memberData = null;        // Task 4 S0-D:main() 存 snap.data()、供 handleShare 組訊息用
     let localRecordCount = 0;     // renderHero init、上傳成功本地 +1(N2 拍板)
 
     // Task 3 子步 3a:deviceId(防按讚重複按、跟「我是誰」分開)
@@ -745,6 +746,30 @@
     let myCachedMembers = [];
     function getMyId()  { return localStorage.getItem(ME_KEY); }
     function setMyId(id) { localStorage.setItem(ME_KEY, id); }
+
+    // Task 4:LINE 分享訊息模板(i18n-ready 結構、Q2 拍板)
+    // 之後加布農語只改字典本身、不動 share button 呼叫端;Task 5/7 動 index.html 時再抽 i18n.js(S0-6)
+    const MESSAGES = {
+      share: {
+        // 標題(空 nickname 防呆、S0-7:省略括號)
+        title: (name, nickname) =>
+          nickname
+            ? `${name}(${nickname})在家族 App 錄了新的話`
+            : `${name} 在家族 App 錄了新的話`,
+        // 內文(Web Share API text 欄位 / LINE URL Scheme / 複製訊息共用)
+        body: (name) => `來聽聽 ${name} 錄的這段:`,
+        // CTA(導引點 link)
+        cta: `👉 打開 Istanda Mapasnava`,
+        // Popover(桌機 fallback)
+        popoverTitle: `分享給家人`,
+        openLineBtn: `📲 開啟 LINE`,
+        copyBtn: `📋 複製訊息`,
+        cancelBtn: `取消`,
+        // toast
+        copiedToast: `✓ 已複製、可貼到任何聊天室`,
+        notFoundToast: `這段錄音已被刪除或還在同步中`,
+      }
+    };
 
     function showError(title, msg) {
       document.getElementById("appContent").hidden = true;
@@ -783,7 +808,8 @@
           showError("找不到這位成員", "這個連結可能壞掉了,或這位成員還沒建好。回首頁挑一位試試。");
           return;
         }
-        renderHero(snap.data());
+        memberData = snap.data();   // Task 4 S0-D:存起來供 handleShare 組訊息
+        renderHero(memberData);
         loadRecordings();           // 子步 4a:Apps Script 初始一次性 load(F_R2 拍板)
         setupRecordingsListener();  // 子步 3a:onSnapshot 接管後續更新(likes / comments / 新文件)
       } catch (err) {
@@ -1212,6 +1238,12 @@
               <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
               <span class="recording-row__comment-count">${(item.comments || []).length}</span>
             </button>
+            <button class="recording-row__action recording-row__share" aria-label="分享第 ${ordinal} 段">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="7" y1="17" x2="17" y2="7"></line>
+                <polyline points="7 7 17 7 17 17"></polyline>
+              </svg>
+            </button>
           </div>
         `;
         row.querySelector(".recording-row__play").addEventListener("click", (e) => {
@@ -1222,6 +1254,10 @@
         });
         row.querySelector(".recording-row__comment").addEventListener("click", () => {
           openCommentSheet(item.fileId);
+        });
+        row.querySelector(".recording-row__share").addEventListener("click", () => {
+          // Step 1:先 console.log 驗證綁定 + fileId、Step 2 才接 handleShare
+          console.log("share clicked", item.fileId);
         });
         recordingsList.appendChild(row);
       });
