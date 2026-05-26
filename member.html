@@ -560,6 +560,96 @@
     }
     .error-screen__home:active { transform: scale(0.96); }
 
+    /* ===== Task 4:分享 Bottom Sheet(.share-sheet__* 新 namespace、S0-3:
+       不複用 .comment-sheet__*、複製 slide-up + backdrop pattern、高度 280px)===== */
+    .share-sheet__backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1200;
+      display: none;
+    }
+    .share-sheet__panel {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: var(--max-w);
+      height: 280px;          /* 內容少、不用 70vh */
+      background: var(--bg-elevated);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 1201;
+      display: none;
+      flex-direction: column;
+      animation: share-sheet-slide 0.25s ease-out;   /* 不複用 comment-sheet-slide */
+    }
+    @keyframes share-sheet-slide {
+      from { transform: translate(-50%, 100%); }
+      to   { transform: translate(-50%, 0); }
+    }
+    .share-sheet__header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .share-sheet__title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .share-sheet__close {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .share-sheet__close:hover { background: var(--bg-soft); }
+    .share-sheet__body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 20px 16px;
+    }
+    .share-sheet__btn {
+      height: 48px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s, background 0.15s;
+    }
+    .share-sheet__btn:active { transform: scale(0.97); }
+    /* 開啟 LINE:主要動作、沿用上傳鈕的強調漸層語彙(此 file 既有 pattern、非新寫死色)*/
+    .share-sheet__btn--line {
+      background: linear-gradient(135deg, #f09433, #dc2743);
+      color: #fff;
+      border: none;
+    }
+    /* 複製訊息:次要、白底 + 米邊 */
+    .share-sheet__btn--copy {
+      background: var(--bg-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    /* 取消:純文字感 */
+    .share-sheet__btn--cancel {
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+    }
+
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -697,6 +787,20 @@
         <textarea class="comment-sheet__input" id="commentInput" placeholder="說點什麼…" rows="1"></textarea>
         <button class="comment-sheet__submit" id="commentSubmit" aria-label="送出">送出</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ Task 4:分享 Popover(Web Share API 不支援時 fallback、文字由 JS 從 MESSAGES 填)============ -->
+  <div class="share-sheet__backdrop" id="shareSheetBackdrop"></div>
+  <div class="share-sheet__panel" id="shareSheetPanel">
+    <div class="share-sheet__header">
+      <div class="share-sheet__title" id="shareSheetTitle"></div>
+      <button class="share-sheet__close" id="shareSheetClose" aria-label="關閉">✕</button>
+    </div>
+    <div class="share-sheet__body">
+      <button class="share-sheet__btn share-sheet__btn--line"   id="shareOpenLine"></button>
+      <button class="share-sheet__btn share-sheet__btn--copy"   id="shareCopy"></button>
+      <button class="share-sheet__btn share-sheet__btn--cancel" id="shareCancel"></button>
     </div>
   </div>
 
@@ -1256,8 +1360,7 @@
           openCommentSheet(item.fileId);
         });
         row.querySelector(".recording-row__share").addEventListener("click", () => {
-          // Step 1:先 console.log 驗證綁定 + fileId、Step 2 才接 handleShare
-          console.log("share clicked", item.fileId);
+          handleShare(item.fileId);
         });
         recordingsList.appendChild(row);
       });
@@ -1742,6 +1845,108 @@
       const name = me.name || me.nickname || "(未命名)";
       submitComment(text, myId, name);
     });
+
+    /* ============================================================
+       Task 4 Step 2:LINE 一鍵分享 — Web Share API + Popover fallback
+       拍板對應:Q1 deep link / Q4 popover 雙鈕 / 補 A iOS 雙保險(text 含 URL)
+       S0-B fileId 當 deep link / S0-C/D 只用 memberData、不查 recording
+       ============================================================ */
+
+    const shareSheetBackdrop = document.getElementById("shareSheetBackdrop");
+    const shareSheetPanel    = document.getElementById("shareSheetPanel");
+    const shareSheetClose    = document.getElementById("shareSheetClose");
+    const shareOpenLineBtn   = document.getElementById("shareOpenLine");
+    const shareCopyBtn       = document.getElementById("shareCopy");
+    const shareCancelBtn     = document.getElementById("shareCancel");
+
+    // i18n:靜態文字從 MESSAGES 填、不寫死 HTML(避免 MESSAGES key 變死代碼)
+    document.getElementById("shareSheetTitle").textContent = MESSAGES.share.popoverTitle;
+    shareOpenLineBtn.textContent = MESSAGES.share.openLineBtn;
+    shareCopyBtn.textContent     = MESSAGES.share.copyBtn;
+    shareCancelBtn.textContent   = MESSAGES.share.cancelBtn;
+
+    let shareMessage = ""; // 當前要分享的完整訊息(showSharePopover 設、開 LINE / 複製共用)
+
+    async function handleShare(fileId) {
+      if (!memberData) return; // 防呆:member 還沒 load 完(規則 4)
+
+      // 1. 組訊息(memberId 是 module 變數、main() 已從 URL 設好、不重 parse)
+      const shareUrl   = `${window.location.origin}${window.location.pathname}?id=${memberId}#rec=${fileId}`;
+      const shareTitle = MESSAGES.share.title(memberData.name, memberData.nickname);
+      // 🔑 雙保險(補 A 拍板):text 欄位裡同時含 URL、防 iOS 13 舊版忽略 url 欄位
+      const shareText  = `${MESSAGES.share.body(memberData.name)}\n${MESSAGES.share.cta}\n${shareUrl}`;
+
+      // 2. 首選 Web Share API
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: shareTitle,
+            text:  shareText,   // 含 URL、舊版 iOS 仍拿得到 link
+            url:   shareUrl,    // 新版 iOS / Android 走 url 欄位
+          });
+          // 成功不吃 toast(系統 Share Sheet 已給回饋)
+        } catch (err) {
+          // 使用者取消(AbortError)不吃 toast
+          if (err.name !== "AbortError") console.warn("Share failed:", err);
+        }
+        return;
+      }
+
+      // 3. 沒 Web Share(多為桌機)→ 跳 popover
+      showSharePopover(shareTitle, shareText);
+    }
+
+    function showSharePopover(title, text) {
+      // 註:text 已含 URL(雙保險)、不再額外 append、避免重複
+      shareMessage = `${title}\n\n${text}`;
+      shareSheetBackdrop.style.display = "block";
+      shareSheetPanel.style.display    = "flex";
+    }
+
+    function closeSharePopover() {
+      shareSheetBackdrop.style.display = "none";
+      shareSheetPanel.style.display    = "none";
+    }
+
+    function openLine(message) {
+      const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(message)}`;
+      window.open(lineUrl, "_blank");
+      closeSharePopover();
+    }
+
+    async function copyMessage(message) {
+      try {
+        await navigator.clipboard.writeText(message);
+        showToast(MESSAGES.share.copiedToast);
+        closeSharePopover();
+      } catch (err) {
+        fallbackCopy(message); // 老瀏覽器 / 非 https → textarea + execCommand
+      }
+    }
+
+    function fallbackCopy(message) {
+      const textarea = document.createElement("textarea");
+      textarea.value = message;
+      textarea.style.position = "fixed";
+      textarea.style.opacity  = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+        showToast(MESSAGES.share.copiedToast);
+      } catch (err) {
+        console.warn("Copy failed:", err);
+        // 極端老瀏覽器:複製也失敗、不擋 UX、popover 照常關、家人可手動長按複製
+      }
+      document.body.removeChild(textarea);
+      closeSharePopover();
+    }
+
+    shareOpenLineBtn.addEventListener("click", () => openLine(shareMessage));
+    shareCopyBtn.addEventListener("click", () => copyMessage(shareMessage));
+    shareCancelBtn.addEventListener("click", closeSharePopover);
+    shareSheetClose.addEventListener("click", closeSharePopover);
+    shareSheetBackdrop.addEventListener("click", closeSharePopover);
 
     main();
   </script>
