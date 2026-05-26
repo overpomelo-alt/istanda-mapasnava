@@ -525,6 +525,16 @@
       background: linear-gradient(135deg, #f09433, #dc2743);
     }
 
+    /* ===== Task 4 Step 3:deep link 落點高亮(薑黃 --accent 邊框閃 2 秒、淡出)===== */
+    .recording-row--highlighted {
+      animation: highlight-pulse 2s ease-out;
+    }
+    @keyframes highlight-pulse {
+      0%   { box-shadow: 0 0 0 2px var(--accent), 0 0 12px var(--accent); background: rgba(212, 160, 23, 0.08); }
+      50%  { box-shadow: 0 0 0 2px var(--accent), 0 0 12px var(--accent); background: rgba(212, 160, 23, 0.08); }
+      100% { box-shadow: 0 0 0 0 transparent, 0 0 0 transparent; background: transparent; }
+    }
+
     /* ===== 友善錯誤畫面 ===== */
     .error-screen {
       min-height: 100vh;
@@ -914,7 +924,8 @@
         }
         memberData = snap.data();   // Task 4 S0-D:存起來供 handleShare 組訊息
         renderHero(memberData);
-        loadRecordings();           // 子步 4a:Apps Script 初始一次性 load(F_R2 拍板)
+        await loadRecordings();     // 子步 4a 初始 load;Task 4 S0-5:改 await、確保清單 render 完才 deep link
+        handleDeepLink();           // Task 4 Step 3:被分享的那筆 → scroll + 金邊高亮
         setupRecordingsListener();  // 子步 3a:onSnapshot 接管後續更新(likes / comments / 新文件)
       } catch (err) {
         console.error(err);
@@ -1947,6 +1958,40 @@
     shareCancelBtn.addEventListener("click", closeSharePopover);
     shareSheetClose.addEventListener("click", closeSharePopover);
     shareSheetBackdrop.addEventListener("click", closeSharePopover);
+
+    /* Task 4 Step 3:deep link 落點 — #rec={fileId} → scroll + 2 秒金邊高亮、跑完清 hash(補 B:F5 不重跳)*/
+    function handleDeepLink() {
+      const hash = window.location.hash; // "#rec=<fileId>"
+      if (!hash.startsWith("#rec=")) return;
+
+      const targetFileId = hash.slice(5);
+
+      // 清 hash 共用:清完 F5 後 hash 沒了、handleDeepLink 直接 return、不重跳(補 B 拍板)
+      const clearHash = () =>
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+
+      // 空 hash 防呆(規則 4)
+      if (!targetFileId) {
+        showToast(MESSAGES.share.notFoundToast);
+        clearHash();
+        return;
+      }
+
+      // S0-A 拍板:selector 用既有 data-file-id、不新增 attribute
+      const targetRow = recordingsList.querySelector(`.recording-row[data-file-id="${targetFileId}"]`);
+      if (!targetRow) {
+        // 該筆被刪 / 還在同步、撈不到
+        showToast(MESSAGES.share.notFoundToast);
+        clearHash();
+        return;
+      }
+
+      targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+      targetRow.classList.add("recording-row--highlighted");
+      setTimeout(() => targetRow.classList.remove("recording-row--highlighted"), 2000);
+
+      clearHash(); // 立刻清、F5 不重跳
+    }
 
     main();
   </script>
