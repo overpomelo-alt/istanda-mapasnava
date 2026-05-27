@@ -1184,6 +1184,17 @@
       });
     }
 
+    // 排序:filename desc(時間戳 _MMDDHHMM 大=新)、tiebreak fileId desc(Drive 唯一 ID、deterministic)
+    // 共用於 loadRecordings 初始排序 + handleUpload 回填取最新(規則 2:不重寫)
+    function sortByNewest(items) {
+      items.sort((a, b) => {
+        const fnCmp = (b.filename || "").localeCompare(a.filename || "");
+        if (fnCmp !== 0) return fnCmp;
+        return (b.fileId || "").localeCompare(a.fileId || "");
+      });
+      return items;
+    }
+
     async function handleUpload() {
       if (!recordedBlob || !memberId) {
         showToast("⚠ 沒錄音可上傳", 2200);
@@ -1207,35 +1218,50 @@
         }
 
         const filename = `${memberId}.${recordedExt}`;
+        // Task 5 Step 1:已知子資料夾就帶 folderId(走快速主路徑)、首次上傳為空(走保底)
+        const knownFolderId = (memberData && memberData.driveFolderId) ? memberData.driveFolderId : "";
 
         // POST blind:Apps Script web app POST 跨域 redirect 到 googleusercontent.com、
         // 瀏覽器擋 redirect 後的 response body、resp.json() 拿到的 data.fileId 是 undefined。
         // 已實測泰雅語 App 同套 workaround:不解析 response、信任 Drive 端寫入、由下面 GET list 撈 fileId。
+        // Task 5 Step 1:POST 多帶 memberId / memberName / folderId、讓後端寫進該成員子資料夾。
         showProgressToast("post", 55);  // 子步 3c.3:四段進度 2/4
         await fetch(APPS_SCRIPT_URL, {
           method: "POST",
-          body: JSON.stringify({ audio: base64, filename })
+          body: JSON.stringify({
+            audio: base64,
+            filename,
+            memberId,
+            memberName: (memberData && memberData.name) || "",
+            folderId: knownFolderId
+          })
         });
 
         // GET ?action=list 撈剛寫入的 fileId(GET 跨域 redirect 行為 CORS 友善、能拿 response body)
+        // Task 5 Step 1 D2 雙模式:有 folderId 走主路徑、無 folderId(首次)走保底 + 回填 driveFolderId
         showProgressToast("get", 85);  // 子步 3c.3:四段進度 3/4
-        const listResp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
-        const listData = await listResp.json();
-        const myFiles = listData[memberId] || [];
-
-        // edge case B:撈不到 memberId 下任何檔 → POST 可能真的失敗、走 catch 讓用戶重試
-        if (myFiles.length === 0) {
-          throw new Error("Apps Script list 撈不到 memberId 的檔案、POST 可能失敗");
+        let latest;
+        let backfillFolderId = null;
+        if (knownFolderId) {
+          // 主路徑:?action=list&folderId= → { ok, folderId, files:[{fileId, filename}] }
+          const resp = await fetch(`${APPS_SCRIPT_URL}?action=list&folderId=${encodeURIComponent(knownFolderId)}`);
+          const data = await resp.json();
+          const files = (data && data.files) || [];
+          if (files.length === 0) {
+            throw new Error("Apps Script list(folderId) 撈不到檔案、POST 可能失敗");
+          }
+          latest = sortByNewest(files)[0];
+        } else {
+          // 保底路徑(首次上傳):?action=list → { ok, mode:'fallback', result:{ memberId:[{fileId, filename, parentFolderId}] } }
+          const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+          const data = await resp.json();
+          const files = (data.result && data.result[memberId]) || [];
+          if (files.length === 0) {
+            throw new Error("Apps Script list(保底) 撈不到 memberId 的檔案、POST 可能失敗");
+          }
+          latest = sortByNewest(files)[0];
+          backfillFolderId = latest.parentFolderId || null; // 首次:拿剛建的子資料夾 ID 回填 Firestore
         }
-
-        // 取最新:filename desc(時間戳 _MMDDHHMM 大=新)、
-        // edge case A:同時間戳 tiebreak 用 fileId desc(Drive 唯一 ID、永遠 deterministic)
-        myFiles.sort((a, b) => {
-          const fnCmp = (b.filename || "").localeCompare(a.filename || "");
-          if (fnCmp !== 0) return fnCmp;
-          return (b.fileId || "").localeCompare(a.fileId || "");
-        });
-        const latest = myFiles[0];
 
         // edge case B':防 Apps Script list schema 變更導致欄位缺失
         if (!latest.fileId || !latest.filename) {
@@ -1255,10 +1281,12 @@
           comments: []   // Task 3 拍板:array of {deviceId, memberId, text, createdAt}
         });
 
-        // 雙寫 recordCount(Q5 拍板)
-        await updateDoc(doc(db, "members", memberId), {
-          recordCount: increment(1)
-        });
+        // 雙寫 recordCount(Q5 拍板);首次上傳同時回填 driveFolderId(規則 13 寫入端)
+        const memberUpdate = { recordCount: increment(1) };
+        if (backfillFolderId) memberUpdate.driveFolderId = backfillFolderId;
+        await updateDoc(doc(db, "members", memberId), memberUpdate);
+        // 本地同步 driveFolderId、下次上傳直接走快速主路徑、不再走保底
+        if (backfillFolderId) memberData.driveFolderId = backfillFolderId;
 
         // N2 拍板:本地 +1 只在「上傳成功的 callback 裡」做、失敗 UI 不變
         localRecordCount += 1;
@@ -1302,13 +1330,11 @@
       try {
         const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
         const data = await resp.json();
-        const items = data[memberId] || [];
-        // 排序同子步 3c.2:filename desc(時間戳大=新)、tiebreak fileId desc
-        items.sort((a, b) => {
-          const fnCmp = (b.filename || "").localeCompare(a.filename || "");
-          if (fnCmp !== 0) return fnCmp;
-          return (b.fileId || "").localeCompare(a.fileId || "");
-        });
+        // Task 5 Step 1:保底 list 新 schema 是 { ok, mode:'fallback', result:{ memberId:[...] } }、
+        // 舊 schema 是扁平 { memberId:[...] };兩者都吃、過渡期相容(只改解析、render 不動)
+        const items = (data.result && data.result[memberId]) || data[memberId] || [];
+        // 排序同子步 3c.2:filename desc(時間戳大=新)、tiebreak fileId desc(共用 sortByNewest)
+        sortByNewest(items);
         allRecordings = items;
         renderRecordings(items);
         // Q5 拍板:Hero N 改用清單長度為真、覆蓋 renderHero 寫的 recordCount
@@ -1390,7 +1416,9 @@
 
     function pickMimeFromFilename(filename) {
       // M3 拍板:filename 後綴判斷、fallback audio/webm
-      if ((filename || "").endsWith(".mp4")) return "audio/mp4";
+      // Task 5 Step 1:audio/mp4 後端副檔名改 .m4a、播放仍當 audio/mp4(.m4a 即 mp4 容器音訊)
+      const fn = filename || "";
+      if (fn.endsWith(".mp4") || fn.endsWith(".m4a")) return "audio/mp4";
       return "audio/webm";
     }
 
