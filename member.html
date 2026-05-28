@@ -661,6 +661,24 @@
     }
 
     [hidden] { display: none !important; }
+
+    /* ===== Step 2a 臨時測試區(Step 2b 拆掉、極簡)===== */
+    .photo-test-section {
+      margin: 24px 16px;
+      padding: 16px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+    }
+    .photo-test-section h3 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
+    .photo-test-info {
+      font-size: 13px; line-height: 1.7; color: var(--text-soft);
+      white-space: pre-wrap; margin: 12px 0; font-variant-numeric: tabular-nums;
+    }
+    .photo-test-preview { display: flex; gap: 12px; flex-wrap: wrap; }
+    .photo-test-preview > div { flex: 1; min-width: 140px; }
+    .photo-test-preview p { font-size: 12px; color: var(--text-muted); margin: 0 0 4px; }
+    .photo-test-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
   </style>
 </head>
 <body>
@@ -728,6 +746,25 @@
         <audio id="recordingsAudio" preload="auto"></audio>
         <div id="recordingsList">
           <div class="recordings-empty">清單載入中…</div>
+        </div>
+      </section>
+
+      <!-- ⚠️ Step 2a 臨時照片壓縮測試區(Step 2b 拆掉)-->
+      <section class="photo-test-section" id="photoTestSection">
+        <h3>📷 照片壓縮測試(Step 2a 暫用、Step 2b 拆)</h3>
+        <input type="file" accept="image/*" id="photoTestInput">
+        <div class="photo-test-result" id="photoTestResult" hidden>
+          <div class="photo-test-info" id="photoTestInfo"></div>
+          <div class="photo-test-preview">
+            <div>
+              <p>原圖</p>
+              <img id="photoTestOriginal" alt="原圖預覽">
+            </div>
+            <div>
+              <p>壓縮後</p>
+              <img id="photoTestCompressed" alt="壓縮後預覽">
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2020,6 +2057,213 @@
 
       clearHash(); // 立刻清、F5 不重跳
     }
+
+    /* ============================================================
+       Task 5 Step 2a:單張照片壓縮 + 自寫 minimal EXIF reader
+       ⚠️ 臨時測試區、Step 2b 會把 compressPhoto 接進發貼文 modal、測試 UI 拆掉
+       Q-A 拍板:自寫、只讀 0x0112 orientation marker、不引第三方 library
+       ============================================================ */
+
+    const PHOTO_MAX_EDGE = 1080;          // 長邊上限
+    const PHOTO_JPEG_QUALITY = 0.8;       // 輸出 JPEG 品質
+    const PHOTO_MAX_BYTES = 5 * 1024 * 1024; // 單張壓縮後上限(spec:超過丟錯、上層提示換一張)
+
+    /* 自寫 minimal EXIF orientation reader
+       只在 JPEG 檔頭找 APP1(FFE1)→ "Exif\0\0" → TIFF → IFD0 → tag 0x0112。
+       任何看不懂的狀況一律 return 1(當作正常方向、graceful degrade)。 */
+    async function readExifOrientation(file) {
+      try {
+        // orientation 一定在檔頭、讀前 64KB 綽綽有餘(省記憶體、不整檔讀)
+        const buf = await file.slice(0, 65536).arrayBuffer();
+        const view = new DataView(buf);
+        const len = view.byteLength;
+
+        // 開頭必須是 JPEG SOI(0xFFD8);PNG / 其他格式沒 EXIF orientation → 當 1
+        if (len < 4 || view.getUint16(0) !== 0xFFD8) return 1;
+
+        let offset = 2; // 跳過 SOI、開始掃 marker
+        while (offset + 4 <= len) {
+          const marker = view.getUint16(offset);     // marker 與長度都是 big-endian
+          if (marker === 0xFFE1) {                    // APP1 = EXIF 所在
+            const segStart = offset + 4;              // 跳過 FFE1(2) + segment length(2)
+            // 確認 payload 開頭是 "Exif"(0x45786966);不是就放棄
+            if (segStart + 8 > len || view.getUint32(segStart) !== 0x45786966) return 1;
+            const tiff = segStart + 6;                // 跳過 "Exif\0\0"(6 bytes)到 TIFF header
+            // TIFF byte order:0x4949 = "II" little-endian、0x4D4D = "MM" big-endian
+            const little = view.getUint16(tiff) === 0x4949;
+            const ifd0 = view.getUint32(tiff + 4, little); // IFD0 相對 TIFF header 的 offset
+            let dir = tiff + ifd0;
+            if (dir + 2 > len) return 1;
+            const entries = view.getUint16(dir, little);   // IFD0 entry 數
+            for (let i = 0; i < entries; i++) {
+              const entry = dir + 2 + i * 12;          // 每筆 entry 12 bytes
+              if (entry + 12 > len) break;
+              if (view.getUint16(entry, little) === 0x0112) { // 0x0112 = Orientation tag
+                const val = view.getUint16(entry + 8, little); // SHORT 值在 entry 第 8 byte
+                return (val >= 1 && val <= 8) ? val : 1;
+              }
+            }
+            return 1; // 有 EXIF 但沒 orientation tag
+          }
+          if ((marker & 0xFF00) !== 0xFF00) return 1; // 不是合法 marker、放棄
+          if (marker === 0xFFDA) return 1;            // 到了 SOS(影像資料)、不用再找
+          const segLen = view.getUint16(offset + 2);  // 其他 segment:用長度跳過
+          if (segLen < 2) return 1;
+          offset += 2 + segLen;
+        }
+        return 1;
+      } catch (err) {
+        console.warn("readExifOrientation 失敗、降級當 1:", err);
+        return 1;
+      }
+    }
+
+    /* 取「未自動旋轉」的原始像素:瀏覽器(iOS Safari 13.4+/Chrome 81+)預設會依 EXIF 自動旋轉、
+       那會跟我們手動旋轉撞成雙重旋轉。createImageBitmap({imageOrientation:'none'}) 拿原始像素、
+       再由我們依 EXIF 自己轉、行為才 deterministic。 */
+    async function loadRawImage(file) {
+      if (typeof createImageBitmap === "function") {
+        try {
+          const bmp = await createImageBitmap(file, { imageOrientation: "none" });
+          return { source: bmp, w: bmp.width, h: bmp.height, cleanup: () => { if (bmp.close) bmp.close(); } };
+        } catch (e) {
+          // 舊 Safari 有 createImageBitmap 但不吃 options → 退到 Image()(下方)
+        }
+      }
+      // fallback(無 createImageBitmap、多為 iOS ≤14):Image() + image-orientation:none 盡量要原始像素
+      return await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.style.imageOrientation = "none";
+        img.onload = () => resolve({
+          source: img, w: img.naturalWidth, h: img.naturalHeight,
+          cleanup: () => URL.revokeObjectURL(url)
+        });
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("圖片載入失敗")); };
+        img.src = url;
+      });
+    }
+
+    async function compressPhoto(file) {
+      // D. HEIC 保險:input accept=image/* 在 iOS 13+ 通常已自動轉 JPEG、這裡只是極端保險
+      if (/\.heic$/i.test(file.name || "")) {
+        throw new Error("HEIC_NOT_SUPPORTED");
+      }
+
+      const orientation = await readExifOrientation(file);
+      const { source, w: iw, h: ih, cleanup } = await loadRawImage(file);
+
+      try {
+        // 長邊縮到 1080、不放大(scale ≤ 1);sw/sh = 縮放後的「原始(未旋轉)」尺寸
+        const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(iw, ih));
+        const sw = Math.round(iw * scale);
+        const sh = Math.round(ih * scale);
+        const swap = (orientation === 6 || orientation === 8); // 90 度:畫布寬高交換
+
+        const canvas = document.createElement("canvas");
+        canvas.width  = swap ? sh : sw;
+        canvas.height = swap ? sw : sh;
+        const ctx = canvas.getContext("2d");
+
+        // B. 依 orientation 套 canvas transform(只處理 1/3/6/8、2/4/5/7 鏡像值當 1)
+        switch (orientation) {
+          case 3: ctx.transform(-1,  0,  0, -1, sw, sh); break; // 180 度
+          case 6: ctx.transform( 0,  1, -1,  0, sh,  0); break; // 順時針 90
+          case 8: ctx.transform( 0, -1,  1,  0,  0, sw); break; // 逆時針 90
+          default: break;                                       // 1(及不處理的鏡像值)
+        }
+        ctx.drawImage(source, 0, 0, sw, sh);
+
+        const outW = canvas.width, outH = canvas.height;
+        const blob = await new Promise((resolve, reject) => {
+          canvas.toBlob(
+            b => b ? resolve(b) : reject(new Error("CANVAS_TOBLOB_NULL")), // iOS 偶爾回 null
+            "image/jpeg",
+            PHOTO_JPEG_QUALITY
+          );
+        });
+
+        // 記憶體釋放(規則 5 + iOS 老機防爆):canvas 歸零、bitmap/objectURL 在 finally
+        canvas.width = canvas.height = 0;
+
+        if (blob.size > PHOTO_MAX_BYTES) throw new Error("PHOTO_TOO_LARGE");
+
+        return {
+          blob,
+          width: outW, height: outH,
+          originalWidth: iw, originalHeight: ih,
+          originalSize: file.size, compressedSize: blob.size,
+          orientation
+        };
+      } finally {
+        if (cleanup) cleanup();
+      }
+    }
+
+    /* E. 臨時測試 UI(Step 2b 拆掉):選照片 → 原圖 / 壓縮後並排 + 大小對比 + console */
+    (function setupPhotoTest() {
+      const input   = document.getElementById("photoTestInput");
+      const result  = document.getElementById("photoTestResult");
+      const info     = document.getElementById("photoTestInfo");
+      const origImg  = document.getElementById("photoTestOriginal");
+      const compImg  = document.getElementById("photoTestCompressed");
+      if (!input) return;
+
+      let lastOrigUrl = null, lastCompUrl = null;
+      function clearPreviousUrls() { // 規則 5:換新前先釋放舊 objectURL、避免洩漏 / ghost
+        if (lastOrigUrl) { URL.revokeObjectURL(lastOrigUrl); lastOrigUrl = null; }
+        if (lastCompUrl) { URL.revokeObjectURL(lastCompUrl); lastCompUrl = null; }
+      }
+
+      input.addEventListener("change", async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+
+        clearPreviousUrls();
+        result.hidden = false;
+        info.textContent = "處理中…";
+        compImg.removeAttribute("src");
+
+        // 原圖預覽(瀏覽器自動依 EXIF 顯示、僅供肉眼對照壓縮後方向)
+        lastOrigUrl = URL.createObjectURL(file);
+        origImg.src = lastOrigUrl;
+
+        const t0 = performance.now();
+        try {
+          const r = await compressPhoto(file);
+          const ms = Math.round(performance.now() - t0);
+          lastCompUrl = URL.createObjectURL(r.blob);
+          compImg.src = lastCompUrl;
+
+          const kb = n => (n / 1024).toFixed(1) + " KB";
+          const pct = r.originalSize ? Math.round((1 - r.compressedSize / r.originalSize) * 100) : 0;
+          info.textContent =
+            `檔名:${file.name}\n` +
+            `orientation:${r.orientation}\n` +
+            `原尺寸:${r.originalWidth}×${r.originalHeight}  (${kb(r.originalSize)})\n` +
+            `壓縮後:${r.width}×${r.height}  (${kb(r.compressedSize)})\n` +
+            `縮減:${pct}%   耗時:${ms} ms`;
+
+          console.log("[photo-test]", {
+            name: file.name, orientation: r.orientation,
+            originalSize: r.originalSize, compressedSize: r.compressedSize,
+            originalDim: `${r.originalWidth}x${r.originalHeight}`,
+            compressedDim: `${r.width}x${r.height}`, reducedPct: pct, ms
+          });
+        } catch (err) {
+          let msg;
+          if      (err.message === "HEIC_NOT_SUPPORTED") msg = "這張是 HEIC 格式、請換一張 JPG 照片";
+          else if (err.message === "PHOTO_TOO_LARGE")    msg = "照片太大、請換一張";
+          else if (err.message === "CANVAS_TOBLOB_NULL") msg = "這張照片無法處理、請換一張";
+          else                                            msg = "壓縮失敗:" + err.message;
+          info.textContent = "⚠ " + msg;
+          compImg.removeAttribute("src");
+          console.error("[photo-test] 壓縮失敗:", err);
+        } finally {
+          input.value = ""; // 清掉、允許再次選同一張觸發 change
+        }
+      });
+    })();
 
     main();
   </script>
