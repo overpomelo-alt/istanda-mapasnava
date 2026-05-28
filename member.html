@@ -2377,6 +2377,67 @@
       }
     }
 
+    /* a7 九輪:從「已顯示成功的原圖預覽 img」直接畫 canvas、繞過所有 file→bytes 路徑。
+       Samsung S21 Ultra 證據:原圖預覽 <img id="photoTestOriginal"> 顯示成功(遙控器圖完整出現),
+       但同 file 走 loadViaDecode 新 img 卻 DECODE_FAILED: EncodingError。
+       問題在「我們重新 createObjectURL + 重新 decode」,不是 file 本身。
+       既有 compressPhoto + loadRawImage 四層當後備、不刪、Step 2b 再清。*/
+    function waitDisplayImgReady(imgEl, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        if (imgEl.complete && imgEl.naturalWidth > 0) { resolve(); return; }
+        let settled = false;
+        const cleanup = () => {
+          imgEl.removeEventListener("load",  onLoad);
+          imgEl.removeEventListener("error", onErr);
+          clearTimeout(t);
+        };
+        const finish = (fn) => { if (settled) return; settled = true; cleanup(); fn(); };
+        const t = setTimeout(() => finish(() => reject(new Error("DISPLAY_IMG_TIMEOUT"))),
+                             timeoutMs || LOAD_IMAGE_TIMEOUT_MS);
+        const onLoad = () => finish(() => {
+          if (imgEl.naturalWidth > 0) resolve();
+          else reject(new Error("DISPLAY_IMG_ZERO_DIM"));
+        });
+        const onErr  = () => finish(() => reject(new Error("DISPLAY_IMG_ONERROR")));
+        imgEl.addEventListener("load",  onLoad);
+        imgEl.addEventListener("error", onErr);
+      });
+    }
+
+    async function compressFromImg(imgEl) {
+      // imgEl 是已經載入顯示成功的 <img>(原圖預覽那個);直接 drawImage、不重讀 file
+      const iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+      if (!iw || !ih) throw new Error("IMG_NOT_READY");
+
+      const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(iw, ih));
+      const sw = Math.round(iw * scale);
+      const sh = Math.round(ih * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = sw; canvas.height = sh;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(imgEl, 0, 0, sw, sh);   // 關鍵:直接畫已顯示的 img、不經過任何 file 讀取
+
+      const outW = canvas.width, outH = canvas.height;
+      console.log("[photo-test:compress-from-img]", { sourceW: iw, sourceH: ih, sw, sh, canvasW: outW, canvasH: outH });
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          b => b ? resolve(b) : reject(new Error("CANVAS_TOBLOB_NULL")),
+          "image/jpeg", PHOTO_JPEG_QUALITY
+        );
+      });
+      canvas.width = canvas.height = 0;   // 規則 5
+      if (blob.size > PHOTO_MAX_BYTES) throw new Error("PHOTO_TOO_LARGE");
+
+      return {
+        blob, width: outW, height: outH,
+        originalWidth: iw, originalHeight: ih,
+        originalSize: 0, compressedSize: blob.size,
+        orientation: "(from displayed img)"
+      };
+    }
+
     /* E. 臨時測試 UI(Step 2b 拆掉):選照片 → 原圖 / 壓縮後並排 + 大小對比 + console */
     (function setupPhotoTest() {
       const input   = document.getElementById("photoTestInput");
@@ -2411,13 +2472,24 @@
         info.textContent = "處理中…";
         compImg.removeAttribute("src");
 
-        // 原圖預覽(瀏覽器自動依 EXIF 顯示、僅供肉眼對照壓縮後方向)
+        // 原圖預覽(瀏覽器自動依 EXIF 顯示;a7 九輪:這個顯示成功的 img 同時作為壓縮來源)
         lastOrigUrl = URL.createObjectURL(file);
         origImg.src = lastOrigUrl;
 
         const t0 = performance.now();
         try {
-          const r = await compressPhoto(file);
+          // a7 九輪:優先走「從已顯示 origImg drawImage」這條新路、舊四層當後備
+          let r;
+          try {
+            await waitDisplayImgReady(origImg);
+            dlog("[displayImg] origImg onload OK w=" + origImg.naturalWidth + " h=" + origImg.naturalHeight);
+            dlog("[displayImg] drawImage from displayed img...");
+            r = await compressFromImg(origImg);
+          } catch (displayErr) {
+            dlog("[displayImg] origImg 載入失敗 " + (displayErr && displayErr.message ? displayErr.message : displayErr));
+            dlog("[displayImg] 回退到 compressPhoto(file) 四層鏈");
+            r = await compressPhoto(file);
+          }
           const ms = Math.round(performance.now() - t0);
           lastCompUrl = URL.createObjectURL(r.blob);
           compImg.src = lastCompUrl;
