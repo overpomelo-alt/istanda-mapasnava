@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+  <!-- a7 四輪:Step 2a 調試期硬性破快取(只 member.html、index.html 不動避免影響首頁效能) -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Mapasnava</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
@@ -679,6 +683,20 @@
     .photo-test-preview > div { flex: 1; min-width: 140px; }
     .photo-test-preview p { font-size: 12px; color: var(--text-muted); margin: 0 0 4px; }
     .photo-test-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
+    /* a7 四輪:頁面內診斷面板(聖瑱師手機螢幕直接看、不靠 Console)*/
+    #photoTestDebug {
+      margin: 12px 0 0;
+      padding: 8px 10px;
+      font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+      background: #f4f1ea;
+      color: #1a1a1a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -753,6 +771,8 @@
       <section class="photo-test-section" id="photoTestSection">
         <h3>📷 照片壓縮測試(Step 2a 暫用、Step 2b 拆)</h3>
         <input type="file" accept="image/*" id="photoTestInput">
+        <!-- a7 四輪:頁面內診斷面板(無 Console 環境也看得到完整路徑) -->
+        <pre id="photoTestDebug" aria-label="診斷"></pre>
         <div class="photo-test-result" id="photoTestResult" hidden>
           <div class="photo-test-info" id="photoTestInfo"></div>
           <div class="photo-test-preview">
@@ -2068,6 +2088,17 @@
     const PHOTO_JPEG_QUALITY = 0.8;       // 輸出 JPEG 品質
     const PHOTO_MAX_BYTES = 5 * 1024 * 1024; // 單張壓縮後上限(spec:超過丟錯、上層提示換一張)
 
+    /* a7 四輪:把所有診斷同步印到頁面(#photoTestDebug),聖瑱師手機沒 Console 也看得到。
+       既有 console.log 保留不動(規則:不改舊行為),只是「同步也印到頁面」。 */
+    function dlog(line) {
+      const el = document.getElementById("photoTestDebug");
+      if (el) el.textContent += line + "\n";
+    }
+    function dlogReset() {
+      const el = document.getElementById("photoTestDebug");
+      if (el) el.textContent = "";
+    }
+
     /* 自寫 minimal EXIF orientation reader
        只在 JPEG 檔頭找 APP1(FFE1)→ "Exif\0\0" → TIFF → IFD0 → tag 0x0112。
        任何看不懂的狀況一律 return 1(當作正常方向、graceful degrade)。 */
@@ -2138,6 +2169,7 @@
         const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
         const t = setTimeout(() => finish(() => {
           URL.revokeObjectURL(url);
+          dlog("[load] OBJ_TIMEOUT");
           reject(new Error("IMAGE_LOAD_FAILED: timeout " + LOAD_IMAGE_TIMEOUT_MS + "ms"));
         }), LOAD_IMAGE_TIMEOUT_MS);
         img.onload = () => finish(() => resolve({
@@ -2146,6 +2178,7 @@
         }));
         img.onerror = () => finish(() => {
           URL.revokeObjectURL(url);
+          dlog("[load] OBJ_ONERROR");
           reject(new Error("IMAGE_LOAD_FAILED: onerror"));
         });
         img.src = url;
@@ -2155,67 +2188,86 @@
     function loadViaFileReader(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onerror = () => reject(new Error("FILEREADER_FAILED: reader.onerror"));
+        reader.onerror = () => {
+          dlog("[load] FR_READER_ERROR");
+          reject(new Error("FILEREADER_FAILED: reader.onerror"));
+        };
         reader.onload = () => {
           // a7 三輪:dataURL 長度診斷(Samsung 雲端 stub 會讀出空 / 極短 result)
           const rlen = reader.result ? reader.result.length : 0;
           console.log("[loadRawImage] FileReader result length=" + (reader.result ? rlen : "null"));
+          dlog("[load] FR result length=" + (reader.result ? rlen : "null"));
           if (!reader.result || rlen < 100) {
+            dlog("[load] FR_EMPTY_RESULT");
             reject(new Error("FR_EMPTY_RESULT: " + (reader.result ? rlen : "null")));
             return;
           }
           const img = document.createElement("img");
           let settled = false;
           const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
-          const t = setTimeout(() => finish(() =>
-            reject(new Error("FILEREADER_FAILED: dataURL img timeout " + LOAD_IMAGE_TIMEOUT_MS + "ms"))
-          ), LOAD_IMAGE_TIMEOUT_MS);
+          const t = setTimeout(() => finish(() => {
+            dlog("[load] FR_IMG_TIMEOUT");
+            reject(new Error("FILEREADER_FAILED: dataURL img timeout " + LOAD_IMAGE_TIMEOUT_MS + "ms"));
+          }), LOAD_IMAGE_TIMEOUT_MS);
           img.onload = () => finish(() => resolve({
             source: img, w: img.naturalWidth, h: img.naturalHeight,
             cleanup: () => {}   // dataURL 不需 revoke
           }));
-          img.onerror = () => finish(() =>
-            reject(new Error("FILEREADER_FAILED: dataURL img onerror"))
-          );
+          img.onerror = () => finish(() => {
+            dlog("[load] FR_IMG_ONERROR");
+            reject(new Error("FILEREADER_FAILED: dataURL img onerror"));
+          });
           img.src = reader.result;
         };
         try { reader.readAsDataURL(file); }
-        catch (e) { reject(new Error("FILEREADER_FAILED: " + (e && e.message ? e.message : e))); }
+        catch (e) {
+          dlog("[load] FR_READER_ERROR throw");
+          reject(new Error("FILEREADER_FAILED: " + (e && e.message ? e.message : e)));
+        }
       });
     }
 
     async function loadRawImage(file) {
       // Path 1: createImageBitmap
       if (typeof createImageBitmap === "function") {
+        dlog("[load] createImageBitmap 試...");
         try {
           const bmp = await createImageBitmap(file); // 預設 imageOrientation:'from-image'、已依 EXIF 轉正
           console.log("[loadRawImage] createImageBitmap OK");
+          dlog("[load] createImageBitmap OK");
           return { source: bmp, w: bmp.width, h: bmp.height,
                    cleanup: () => { if (bmp.close) bmp.close(); } };
         } catch (e) {
           console.log("[loadRawImage] BITMAP_FAILED, fallback to Image()", e);
+          dlog("[load] BITMAP_FAILED name=" + (e && e.name ? e.name : "?") + " msg=" + (e && e.message ? e.message : e));
         }
       } else {
         console.log("[loadRawImage] createImageBitmap unavailable, fallback to Image()");
+        dlog("[load] createImageBitmap unavailable");
       }
 
       // Path 2: Image() + objectURL
+      dlog("[load] objectURL 試...");
       try {
         const r = await loadViaObjectURL(file);
         console.log("[loadRawImage] Image fallback OK");
+        dlog("[load] objectURL OK");
         return r;
       } catch (e) {
         console.log("[loadRawImage] IMAGE_LOAD_FAILED, fallback to FileReader", e);
+        // 細分 tag(OBJ_ONERROR / OBJ_TIMEOUT)已在 loadViaObjectURL 內 dlog
       }
 
       // Path 3: FileReader → dataURL → Image(最後一層、相容性最高)
       console.log("[loadRawImage] using FileReader fallback");
+      dlog("[load] FileReader 試...");
       try {
         const r = await loadViaFileReader(file);
         console.log("[loadRawImage] FileReader fallback OK");
+        dlog("[load] FileReader OK");
         return r;
       } catch (e) {
-        // 三層都掛、拋出最後一層的精確錯誤給上層
+        // 三層都掛、拋出最後一層的精確錯誤給上層;細分 tag 已在 loadViaFileReader 內 dlog
         throw (e instanceof Error ? e : new Error("FILEREADER_FAILED: " + e));
       }
     }
@@ -2296,10 +2348,15 @@
         const file = input.files && input.files[0];
         if (!file) return;
 
+        // a7 四輪:每次選新照片診斷面板先清空(規則 5)
+        dlogReset();
+
         // a7 三輪:file 層級診斷(Samsung 雲端 stub 會 size=0、type 空 → 一眼看穿)
         console.log("[photo-test:file]", {
           name: file.name, type: file.type, size: file.size, lastModified: file.lastModified
         });
+        dlog("[file] name=" + file.name + " type=" + file.type +
+             " size=" + file.size + " lastModified=" + file.lastModified);
 
         clearPreviousUrls();
         result.hidden = false;
@@ -2332,6 +2389,7 @@
             originalDim: `${r.originalWidth}x${r.originalHeight}`,
             compressedDim: `${r.width}x${r.height}`, reducedPct: pct, ms
           });
+          dlog("[result] 成功 壓縮後 " + r.width + "x" + r.height);
         } catch (err) {
           // a7 修:loadRawImage 三層 fallback 帶 ERROR_TYPE tag、UI 顯示 type、Console 印詳細 stack
           // a7 三輪:EMPTY_FILE / FR_EMPTY_RESULT = Samsung 雲端 stub 症狀(size=0 / dataURL 空)
@@ -2349,6 +2407,7 @@
           info.textContent = "⚠ " + msg;
           compImg.removeAttribute("src");
           console.error("[photo-test] 壓縮失敗:", err);
+          dlog("[error] " + (tag || "UNKNOWN") + " | msg=" + (err.message || ""));
         } finally {
           input.value = ""; // 清掉、允許再次選同一張觸發 change
         }
