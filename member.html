@@ -771,6 +771,8 @@
       <section class="photo-test-section" id="photoTestSection">
         <h3>📷 照片壓縮測試(Step 2a 暫用、Step 2b 拆)</h3>
         <input type="file" accept="image/*" id="photoTestInput">
+        <!-- a7 十輪:FormData 直傳測試(純驗證、不存 Drive、不壓縮)-->
+        <button type="button" id="formdataTestBtn" style="margin-top:8px;padding:8px 12px;border:1px solid #1a1a1a;background:#fff;border-radius:6px;font:13px ui-monospace,monospace;cursor:pointer;">測試 FormData 直傳</button>
         <!-- a7 四輪:頁面內診斷面板(無 Console 環境也看得到完整路徑) -->
         <pre id="photoTestDebug" aria-label="診斷"></pre>
         <div class="photo-test-result" id="photoTestResult" hidden>
@@ -2532,6 +2534,62 @@
           input.value = ""; // 清掉、允許再次選同一張觸發 change
         }
       });
+
+      /* a7 十輪:FormData 直傳測試
+         Samsung S21 Ultra 相機照前端任何「讀 bytes」方法都失敗。FormData 是讓
+         瀏覽器內部把 file 塞進 multipart request body、JS 不用讀 bytes。
+         測這條能不能繞過去。⚠️ 點之前要先選好那張讀不到的照片(input 上)。 */
+      const formdataTestBtn = document.getElementById("formdataTestBtn");
+      if (formdataTestBtn) {
+        formdataTestBtn.addEventListener("click", async () => {
+          const file = input.files && input.files[0];
+          if (!file) {
+            dlog("[formdata] 請先在上方選一張照片再按這顆");
+            return;
+          }
+          dlog("[formdata] file: name=" + file.name + " size=" + file.size + " type=" + file.type);
+
+          const fd = new FormData();
+          fd.append("photo", file, file.name);
+          // ⚠️ 絕對不要自己設 Content-Type、要讓瀏覽器自動帶 multipart boundary
+
+          dlog("[formdata] POST 送出中...(blind、跨域 redirect 不解析 response)");
+          try {
+            await fetch(APPS_SCRIPT_URL, { method: "POST", body: fd });
+            dlog("[formdata] POST 送出完成");
+          } catch (e) {
+            dlog("[formdata] POST throw: " + (e && e.message ? e.message : e));
+            return;
+          }
+
+          // 等 1 秒、給 Apps Script 寫完 PropertiesService
+          await new Promise(r => setTimeout(r, 1000));
+          dlog("[formdata] GET ?action=lastFormDataSize 撈後端記錄...");
+          try {
+            const resp = await fetch(APPS_SCRIPT_URL + "?action=lastFormDataSize&_=" + Date.now());
+            const data = await resp.json();
+            const backendSize = parseInt(data.size || "0", 10);
+            dlog("[formdata] 後端 body size=" + backendSize + " (含 multipart 開銷、預期 ≈ file.size + 數百 bytes)");
+            dlog("[formdata] 後端 type=" + (data.type || ""));
+            if (data.debug) dlog("[formdata] e debug=" + data.debug);
+            if (backendSize === 0) {
+              dlog("[formdata] ❌ 後端收到 0 bytes、FormData 也死");
+            } else {
+              const diff = backendSize - file.size;
+              // 開銷一般 100-1000 bytes、保險抓 5KB 內視為「完整收到」
+              if (diff >= 0 && diff < 5000) {
+                dlog("[formdata] ✅ FormData 完整收到(body 比 file 大 " + diff + " bytes、合理的 multipart 開銷)");
+              } else if (diff < 0) {
+                dlog("[formdata] ⚠ 後端 body 小於 file.size(差 " + diff + " bytes)、不對勁");
+              } else {
+                dlog("[formdata] ⚠ 後端 body 比 file 大 " + diff + " bytes、超出預期開銷、可能多 part 或編碼問題");
+              }
+            }
+          } catch (e) {
+            dlog("[formdata] GET 撈後端 size 失敗: " + (e && e.message ? e.message : e));
+          }
+        });
+      }
     })();
 
     main();

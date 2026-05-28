@@ -1,18 +1,17 @@
 /* ============================================================
    Istanda Mapasnava · Apps Script receiver
-   Task 5 Step 1 改造版(2026-05-27)
+   Task 5 Step 1 + a7 十輪 FormData 診斷版(2026-05-28)
 
    ⚠️ 這份是「記錄用」副本、Apps Script 不在 GitHub 部署鏈內。
    聖瑱師請把這份整段貼到 Apps Script 編輯器、然後:
    管理部署作業 → 編輯 → 版本選「新版本」→ 部署。
    舊端點 URL(macros/s/AKfycb...)不變。
 
-   改動摘要(對齊 specs/task-feed.md Step 1 + D2 拍板):
-   - 新增 ROOT_FOLDER_ID(每人子資料夾的母資料夾)
-   - UPLOAD_FOLDER_ID 保留(?id= 讀舊檔、保底 list 過渡相容)
-   - doPost 寫進該成員專屬子資料夾(getMemberFolder)、回 folderId
-   - 白名單擴增 jpg/png、audio/mp4 副檔名改 .m4a(對齊 spec)
-   - doGet ?action=list 雙模式:folderId 主路徑 / 無 folderId 保底遞迴
+   改動摘要:
+   - Step 1:每人子資料夾、jpg/png 白名單、?action=list 雙模式(folderId 主路徑 / 保底遞迴)
+   - a7 十輪:doPost 加 multipart/form-data 偵測分支(handleFormDataTest)、
+     不寫 Drive、只把 e.postData.length / type / debug 存進 PropertiesService;
+     doGet 加 ?action=lastFormDataSize、讓前端撈出後端收到的 byte 數
    ============================================================ */
 
 const UPLOAD_FOLDER_ID = '1V_yWWyOUU4KIMOwThU1HByYTqlB7AE8d'; // 舊單一資料夾、?id= 讀舊檔 + 保底 list 過渡相容用
@@ -41,6 +40,18 @@ const EXT_TO_MIME = {
 function doGet(e) {
   if (!e) e = { parameter: {} };
   const action = e.parameter.action;
+
+  // a7 十輪:讓前端撈出上一次 FormData POST 收到的 byte 數 + e debug
+  if (action === 'lastFormDataSize') {
+    const props = PropertiesService.getScriptProperties();
+    return jsonOut({
+      ok: true,
+      size:  props.getProperty('lastFormDataSize') || '0',
+      type:  props.getProperty('lastFormDataType') || '',
+      ts:    props.getProperty('lastFormDataTs')   || '0',
+      debug: props.getProperty('lastFormDataDebug') || ''
+    });
+  }
 
   if (action === 'list') {
     const folderId = e.parameter.folderId;
@@ -94,6 +105,11 @@ function collectFolderFiles(folder, result) {
 
 function doPost(e) {
   try {
+    // a7 十輪:multipart/form-data 測試分支(FormData 直傳)— 不寫 Drive、只記 size
+    if (e && e.postData && e.postData.type &&
+        e.postData.type.indexOf('multipart/form-data') === 0) {
+      return handleFormDataTest(e);
+    }
     const data = JSON.parse(e.postData.contents);
     const now = new Date();
     const ts = Utilities.formatDate(now, 'Asia/Taipei', 'MMddHHmm');
@@ -144,4 +160,33 @@ function getMemberFolder(folderId, memberName, memberId) {
 function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* a7 十輪:FormData multipart 測試處理(不寫 Drive、只驗 file 是否完整到後端)
+   為何不抽 photo part:Apps Script e.postData.contents 是 JS 字串(UTF-16 code unit),
+   binary 文件位元組透過 string 表示 byte 長度會失真;e.postData.length 才是真實
+   request body byte count(= file.size + multipart boundary 開銷、通常 ~200-500 bytes)。
+   診斷目的是「file 到底有沒有過來」、看 bodyLen ≈ file.size 即可。 */
+function handleFormDataTest(e) {
+  const props = PropertiesService.getScriptProperties();
+  const bodyLen = (e.postData && e.postData.length) ? e.postData.length : 0;
+  const type    = (e.postData && e.postData.type)   ? e.postData.type   : '';
+  const debug = {
+    parameterKeys:  e.parameter  ? Object.keys(e.parameter)  : null,
+    parametersKeys: e.parameters ? Object.keys(e.parameters) : null,
+    postDataType:   type,
+    postDataLength: bodyLen,
+    hasContents:    !!(e.postData && e.postData.contents),
+    contentsStrLen: (e.postData && e.postData.contents) ? e.postData.contents.length : 0
+  };
+  props.setProperty('lastFormDataSize',  String(bodyLen));
+  props.setProperty('lastFormDataType',  type);
+  props.setProperty('lastFormDataTs',    String(Date.now()));
+  props.setProperty('lastFormDataDebug', JSON.stringify(debug));
+  return jsonOut({
+    ok: true,
+    mode: 'formdata-test',
+    receivedBytes: bodyLen,
+    type: type
+  });
 }
