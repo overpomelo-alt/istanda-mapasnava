@@ -2118,23 +2118,23 @@
       }
     }
 
-    /* 取「未自動旋轉」的原始像素:瀏覽器(iOS Safari 13.4+/Chrome 81+)預設會依 EXIF 自動旋轉、
-       那會跟我們手動旋轉撞成雙重旋轉。createImageBitmap({imageOrientation:'none'}) 拿原始像素、
-       再由我們依 EXIF 自己轉、行為才 deterministic。 */
+    /* 方向 α 拍板(2026-05-28 a1 修):信任瀏覽器自動依 EXIF 轉正、拿「已轉正」像素直接畫、不手動旋轉。
+       理由:iOS Safari 上 imageOrientation:'none' 不被尊重(a1 證據:orientation=6 卻拿到 3024×4032 已轉正像素),
+       再手動轉一次 = 雙重旋轉、人躺平。現代 iOS Safari 13.4+ / Android Chrome / 桌機 Chrome 81+ 全會自動轉正、
+       直接信任最穩、code 最少、跨機型一致。 */
     async function loadRawImage(file) {
       if (typeof createImageBitmap === "function") {
         try {
-          const bmp = await createImageBitmap(file, { imageOrientation: "none" });
+          const bmp = await createImageBitmap(file); // 預設 imageOrientation:'from-image'、已依 EXIF 轉正
           return { source: bmp, w: bmp.width, h: bmp.height, cleanup: () => { if (bmp.close) bmp.close(); } };
         } catch (e) {
-          // 舊 Safari 有 createImageBitmap 但不吃 options → 退到 Image()(下方)
+          // 某些瀏覽器 createImageBitmap 對檔案 throw(a7 疑點)→ 退到 Image()
         }
       }
-      // fallback(無 createImageBitmap、多為 iOS ≤14):Image() + image-orientation:none 盡量要原始像素
+      // fallback:Image() + objectURL、現代瀏覽器 <img> 同樣自動轉正、不設 image-orientation
       return await new Promise((resolve, reject) => {
         const url = URL.createObjectURL(file);
         const img = new Image();
-        img.style.imageOrientation = "none";
         img.onload = () => resolve({
           source: img, w: img.naturalWidth, h: img.naturalHeight,
           cleanup: () => URL.revokeObjectURL(url)
@@ -2150,31 +2150,28 @@
         throw new Error("HEIC_NOT_SUPPORTED");
       }
 
-      const orientation = await readExifOrientation(file);
+      const orientation = await readExifOrientation(file); // 純診斷、方向 α 後不影響 canvas
       const { source, w: iw, h: ih, cleanup } = await loadRawImage(file);
 
       try {
-        // 長邊縮到 1080、不放大(scale ≤ 1);sw/sh = 縮放後的「原始(未旋轉)」尺寸
+        // source 已是「轉正後」像素(方向 α);長邊縮到 1080、不放大(scale ≤ 1)
         const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(iw, ih));
         const sw = Math.round(iw * scale);
         const sh = Math.round(ih * scale);
-        const swap = (orientation === 6 || orientation === 8); // 90 度:畫布寬高交換
 
         const canvas = document.createElement("canvas");
-        canvas.width  = swap ? sh : sw;
-        canvas.height = swap ? sw : sh;
+        canvas.width  = sw;   // 不交換、不旋轉:瀏覽器已依 EXIF 轉正
+        canvas.height = sh;
         const ctx = canvas.getContext("2d");
-
-        // B. 依 orientation 套 canvas transform(只處理 1/3/6/8、2/4/5/7 鏡像值當 1)
-        switch (orientation) {
-          case 3: ctx.transform(-1,  0,  0, -1, sw, sh); break; // 180 度
-          case 6: ctx.transform( 0,  1, -1,  0, sh,  0); break; // 順時針 90
-          case 8: ctx.transform( 0, -1,  1,  0,  0, sw); break; // 逆時針 90
-          default: break;                                       // 1(及不處理的鏡像值)
-        }
         ctx.drawImage(source, 0, 0, sw, sh);
 
         const outW = canvas.width, outH = canvas.height;
+
+        // 規則 9 診斷:orientation 純參考;canvas 應 == sw/sh(無旋轉、不交換)
+        console.log("[photo-test:compress]", {
+          orientation, sourceW: iw, sourceH: ih, sw, sh, canvasW: outW, canvasH: outH
+        });
+
         const blob = await new Promise((resolve, reject) => {
           canvas.toBlob(
             b => b ? resolve(b) : reject(new Error("CANVAS_TOBLOB_NULL")), // iOS 偶爾回 null
