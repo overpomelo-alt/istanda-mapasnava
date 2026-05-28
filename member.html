@@ -2160,6 +2160,33 @@
        Path 3: FileReader → dataURL → Image    — 最後保險、相容性最高、慢 */
     const LOAD_IMAGE_TIMEOUT_MS = 5000;
 
+    /* a7 八輪:Path 0 — img.decode()(瀏覽器原生解碼、繞過 createImageBitmap / FileReader 那條程式化讀 bytes 路徑)
+       Samsung S21 Ultra 證據:原圖預覽(<img src=objectURL>)能顯示 → 瀏覽器內部解碼可行;
+       三層程式化路徑全掛 → 主動讀 bytes 是死路。讓瀏覽器自己解碼、我們只從已解碼的 img 畫 canvas。
+       Path 0 OK 就直接用、不往下走 1/2/3。 */
+    async function loadViaDecode(file) {
+      const url = URL.createObjectURL(file);
+      const img = document.createElement("img");
+      img.style.cssText = "position:absolute;left:-99999px;top:0;width:auto;height:auto;visibility:hidden;pointer-events:none;";
+      img.src = url;                       // src 先設、decode() 前才能解碼
+      document.body.appendChild(img);      // Samsung 證據:DOM-attached 較易解碼
+      try {
+        await img.decode();
+        dlog("[load] img.decode() OK w=" + img.naturalWidth + " h=" + img.naturalHeight);
+        return {
+          source: img, w: img.naturalWidth, h: img.naturalHeight,
+          // cleanup 由 compressPhoto finally 呼叫:drawImage 用完才移除 img + revoke
+          cleanup: () => { if (img.parentNode) img.parentNode.removeChild(img); URL.revokeObjectURL(url); }
+        };
+      } catch (e) {
+        // 規則 5:decode 失敗也要立刻釋放、不留殘 img / 不洩漏 objectURL
+        if (img.parentNode) img.parentNode.removeChild(img);
+        URL.revokeObjectURL(url);
+        dlog("[load] DECODE_FAILED name=" + (e && e.name ? e.name : "?") + " msg=" + (e && e.message ? e.message : e));
+        throw new Error("DECODE_FAILED: " + (e && e.message ? e.message : e));
+      }
+    }
+
     function loadViaObjectURL(file) {
       // a7 五輪:DOM-attached 隱藏 img(Samsung S21 Ultra / Chrome 148 證據:detached img + 程式化讀取
       // 全拿不到 file blob;但 DOM 內的 <img> 直接吃 objectURL 可以,如原圖預覽。把 img 掛進 DOM 是關鍵差異。)
@@ -2235,6 +2262,20 @@
     }
 
     async function loadRawImage(file) {
+      // Path 0: img.decode()(a7 八輪、最優先、瀏覽器原生解碼路徑)
+      if (typeof HTMLImageElement !== "undefined" &&
+          typeof HTMLImageElement.prototype.decode === "function") {
+        dlog("[load] img.decode() 試...");
+        try {
+          return await loadViaDecode(file);
+        } catch (e) {
+          // dlog DECODE_FAILED 已在 loadViaDecode 內、繼續往 Path 1
+          console.log("[loadRawImage] DECODE_FAILED, fallback to createImageBitmap", e);
+        }
+      } else {
+        dlog("[load] img.decode unavailable");
+      }
+
       // Path 1: createImageBitmap
       if (typeof createImageBitmap === "function") {
         dlog("[load] createImageBitmap 試...");
@@ -2400,7 +2441,7 @@
         } catch (err) {
           // a7 修:loadRawImage 三層 fallback 帶 ERROR_TYPE tag、UI 顯示 type、Console 印詳細 stack
           // a7 三輪:EMPTY_FILE / FR_EMPTY_RESULT = Samsung 雲端 stub 症狀(size=0 / dataURL 空)
-          const KNOWN_TAGS = ["BITMAP_FAILED", "IMAGE_LOAD_FAILED", "FILEREADER_FAILED", "FR_EMPTY_RESULT"];
+          const KNOWN_TAGS = ["DECODE_FAILED", "BITMAP_FAILED", "IMAGE_LOAD_FAILED", "FILEREADER_FAILED", "FR_EMPTY_RESULT"];
           const tag = (err.message || "").split(":")[0];
           const CLOUD_STUB_MSG = "這張照片可能存在雲端、請先在相簿下載到手機、或改用相機拍攝";
           let msg;
