@@ -1,6 +1,6 @@
 # Istanda Mapasnava — 目前進度
 
-> 最後更新：2026-05-26（Task 4 LINE 一鍵分享已 ship）
+> 最後更新：2026-05-28（Task 4 歸檔 + Task 5 Step 1 完成）
 > 每完成一個段落就更新這份檔案，讓下一個 Claude / Claude Code 一打開就知道現況。
 
 ---
@@ -18,7 +18,7 @@
 
 - **死線**：2026-06-15（給 87 人家族實際使用）
 - **真正的死線**：2026-06-22（一週後還有人打開）
-- **今天**：2026-05-26（剩 20 天）
+- **今天**：2026-05-28（剩 18 天）
 - **理論進度**：第 4 週「族語本」→ **實際:Task 1-4 全部完成、互動引擎超前、領先時程約 2 週**
 - **補救決策**：砍掉族語本，補回錄音核心 + 互動引擎（詳見「決策記錄」）→ 已生效、剩 Task 5 Feed 一項 6/15 必做
 
@@ -107,12 +107,23 @@
 - [x] DoD 16/16 驗收 PASS:桌機 Share Sheet / popover、手機 LINE 實機分享(URL 含 `#rec={fileId}`)、deep link scroll + 高亮、F5 不重跳、不存在/空 fileId 邊界、空 nickname 防呆、console 無 error
 - [x] 範圍紀律:git 證實三個 Step commit 只動 `member.html`、index.html / style.css / Apps Script 零改動
 - [x] **北極星第三題達成**:2026-05-26 14:17 訊息進家族 LINE 群組
+- [x] **✅ 已完成歸檔**(2026-05-27 commit `a7e89ad`「Archive Task 4: 16/16 DoD passed, LINE share live」)
+
+### Task 5 Step 1：每人子資料夾上傳 + folderId 雙模式回填（2026-05-28 完成）
+- [x] Step 1 commit `6a28aa7`「每人子資料夾上傳 + folderId 雙模式回填」
+- [x] Apps Script 部署新版本:doGet 雙模式 list(主路徑 `?action=list&folderId=` 只掃指定子夾 / 保底 `?action=list` 遞迴 ROOT 下一層 + 舊資料夾、每筆帶 parentFolderId)、doPost 含 getMemberFolder(folderId 有就用、無則 ROOT 下查/建子資料夾)
+- [x] 子資料夾建立完成:`Cina Umav_2l95Zhad`、`Tama Iman_pFPQxryR`
+- [x] 5 項實機自測全 PASS:舊錄音 `?id=` 兼容無迴歸、首次建夾、第二次走快速主路徑、換人建新夾、無痕保底 list
+- [x] 雙寫 `members.driveFolderId` 正常(首次上傳回填、本地同步、下次走快速主路徑)
+- [x] Task 1 舊錄音兼容無迴歸、recordings 新增正常
+- [x] 範圍紀律:只動 `member.html` + 新增 `apps-script/` 記錄檔、index.html / script.js / posts / recordCount 邏輯零改動
+- [x] 連帶必要修補(已 flag):`loadRecordings` 解析吃新保底 schema(舊扁平相容)、`pickMimeFromFilename` 認 `.m4a`(audio/mp4 副檔名改 .m4a 後仍可播)、保底 list 過渡期多掃舊 `UPLOAD_FOLDER_ID`(清完試錄自然空)
 
 ---
 
 ## 🔄 進行中
 
-- [ ] **Task 5：首頁 Feed source 切到 recordings collection**（順帶解 v0 `posts` placeholder;原排第四週 6/9-6/15、Task 1-4 全部超前完成、可考慮提前到 6/2-6/8 動工)
+- [ ] **Task 5 Step 2a:單張照片壓縮 + iOS EXIF 必驗**(自寫 `readExifOrientation` 讀 0x0112 marker ~30-50 行、canvas 1080px / 80% JPEG、**iPhone 直立照片壓縮後不橫躺為核心驗收**、整個 Task 5 最高風險點、過關才進 Step 2b)
 
 ---
 
@@ -137,6 +148,7 @@
 
 **🟡 6/15 後候選（原本 6/15 必做、現順延）**
 - Task 6：PWA 化（manifest.json + sw.js + 圖示）— 6/15 上線後評估必要再做
+- Task 6.x:**Drive 回憶錄式分類管理**:依時間建鏡像資料夾、不動 memberId 命名核心(聖瑱師 2026-05-28 提案、需求合理、Step 2a 後再評估)
 
 **第二死線 6/16-6/22**
 - 觀察打開率（目標：6/22 ≥ 6/15）
