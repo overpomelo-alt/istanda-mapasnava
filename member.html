@@ -2157,6 +2157,13 @@
         const reader = new FileReader();
         reader.onerror = () => reject(new Error("FILEREADER_FAILED: reader.onerror"));
         reader.onload = () => {
+          // a7 三輪:dataURL 長度診斷(Samsung 雲端 stub 會讀出空 / 極短 result)
+          const rlen = reader.result ? reader.result.length : 0;
+          console.log("[loadRawImage] FileReader result length=" + (reader.result ? rlen : "null"));
+          if (!reader.result || rlen < 100) {
+            reject(new Error("FR_EMPTY_RESULT: " + (reader.result ? rlen : "null")));
+            return;
+          }
           const img = document.createElement("img");
           let settled = false;
           const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
@@ -2214,6 +2221,10 @@
     }
 
     async function compressPhoto(file) {
+      // a7 三輪:Samsung 雲端 stub 防呆(規則 4)— 雲端未下載到本機時 file.size=0、三層 fallback 全破
+      if (!file || file.size === 0) {
+        throw new Error("EMPTY_FILE: size=" + (file ? file.size : "null"));
+      }
       // D. HEIC 保險:input accept=image/* 在 iOS 13+ 通常已自動轉 JPEG、這裡只是極端保險
       if (/\.heic$/i.test(file.name || "")) {
         throw new Error("HEIC_NOT_SUPPORTED");
@@ -2285,6 +2296,11 @@
         const file = input.files && input.files[0];
         if (!file) return;
 
+        // a7 三輪:file 層級診斷(Samsung 雲端 stub 會 size=0、type 空 → 一眼看穿)
+        console.log("[photo-test:file]", {
+          name: file.name, type: file.type, size: file.size, lastModified: file.lastModified
+        });
+
         clearPreviousUrls();
         result.hidden = false;
         info.textContent = "處理中…";
@@ -2318,12 +2334,16 @@
           });
         } catch (err) {
           // a7 修:loadRawImage 三層 fallback 帶 ERROR_TYPE tag、UI 顯示 type、Console 印詳細 stack
-          const KNOWN_TAGS = ["BITMAP_FAILED", "IMAGE_LOAD_FAILED", "FILEREADER_FAILED"];
+          // a7 三輪:EMPTY_FILE / FR_EMPTY_RESULT = Samsung 雲端 stub 症狀(size=0 / dataURL 空)
+          const KNOWN_TAGS = ["BITMAP_FAILED", "IMAGE_LOAD_FAILED", "FILEREADER_FAILED", "FR_EMPTY_RESULT"];
           const tag = (err.message || "").split(":")[0];
+          const CLOUD_STUB_MSG = "這張照片可能存在雲端、請先在相簿下載到手機、或改用相機拍攝";
           let msg;
           if      (err.message === "HEIC_NOT_SUPPORTED") msg = "這張是 HEIC 格式、請換一張 JPG 照片";
           else if (err.message === "PHOTO_TOO_LARGE")    msg = "照片太大、請換一張";
           else if (err.message === "CANVAS_TOBLOB_NULL") msg = "這張照片無法處理、請換一張";
+          else if (tag === "EMPTY_FILE")                 msg = CLOUD_STUB_MSG;
+          else if (tag === "FR_EMPTY_RESULT")            msg = CLOUD_STUB_MSG; // dataURL 空 = 同症狀
           else if (KNOWN_TAGS.includes(tag))             msg = "壓縮失敗:" + tag;
           else                                            msg = "壓縮失敗:" + err.message;
           info.textContent = "⚠ " + msg;
