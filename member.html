@@ -2121,27 +2121,96 @@
     /* 方向 α 拍板(2026-05-28 a1 修):信任瀏覽器自動依 EXIF 轉正、拿「已轉正」像素直接畫、不手動旋轉。
        理由:iOS Safari 上 imageOrientation:'none' 不被尊重(a1 證據:orientation=6 卻拿到 3024×4032 已轉正像素),
        再手動轉一次 = 雙重旋轉、人躺平。現代 iOS Safari 13.4+ / Android Chrome / 桌機 Chrome 81+ 全會自動轉正、
-       直接信任最穩、code 最少、跨機型一致。 */
+       直接信任最穩、code 最少、跨機型一致。
+
+       a7 修(2026-05-28):三層 fallback 鏈、每層失敗有 console 診斷 + 精確 ERROR_TYPE。
+       Path 1: createImageBitmap(file)        — 最現代、最快
+       Path 2: Image() + objectURL + 5s timeout — Android Chrome 主路徑
+       Path 3: FileReader → dataURL → Image    — 最後保險、相容性最高、慢 */
+    const LOAD_IMAGE_TIMEOUT_MS = 5000;
+
+    function loadViaObjectURL(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        // 用 createElement('img')(某些舊機 new Image() 有 quirk);不設 crossOrigin / referrerPolicy / imageOrientation
+        const img = document.createElement("img");
+        let settled = false;
+        const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
+        const t = setTimeout(() => finish(() => {
+          URL.revokeObjectURL(url);
+          reject(new Error("IMAGE_LOAD_FAILED: timeout " + LOAD_IMAGE_TIMEOUT_MS + "ms"));
+        }), LOAD_IMAGE_TIMEOUT_MS);
+        img.onload = () => finish(() => resolve({
+          source: img, w: img.naturalWidth, h: img.naturalHeight,
+          cleanup: () => URL.revokeObjectURL(url)
+        }));
+        img.onerror = () => finish(() => {
+          URL.revokeObjectURL(url);
+          reject(new Error("IMAGE_LOAD_FAILED: onerror"));
+        });
+        img.src = url;
+      });
+    }
+
+    function loadViaFileReader(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("FILEREADER_FAILED: reader.onerror"));
+        reader.onload = () => {
+          const img = document.createElement("img");
+          let settled = false;
+          const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
+          const t = setTimeout(() => finish(() =>
+            reject(new Error("FILEREADER_FAILED: dataURL img timeout " + LOAD_IMAGE_TIMEOUT_MS + "ms"))
+          ), LOAD_IMAGE_TIMEOUT_MS);
+          img.onload = () => finish(() => resolve({
+            source: img, w: img.naturalWidth, h: img.naturalHeight,
+            cleanup: () => {}   // dataURL 不需 revoke
+          }));
+          img.onerror = () => finish(() =>
+            reject(new Error("FILEREADER_FAILED: dataURL img onerror"))
+          );
+          img.src = reader.result;
+        };
+        try { reader.readAsDataURL(file); }
+        catch (e) { reject(new Error("FILEREADER_FAILED: " + (e && e.message ? e.message : e))); }
+      });
+    }
+
     async function loadRawImage(file) {
+      // Path 1: createImageBitmap
       if (typeof createImageBitmap === "function") {
         try {
           const bmp = await createImageBitmap(file); // 預設 imageOrientation:'from-image'、已依 EXIF 轉正
-          return { source: bmp, w: bmp.width, h: bmp.height, cleanup: () => { if (bmp.close) bmp.close(); } };
+          console.log("[loadRawImage] createImageBitmap OK");
+          return { source: bmp, w: bmp.width, h: bmp.height,
+                   cleanup: () => { if (bmp.close) bmp.close(); } };
         } catch (e) {
-          // 某些瀏覽器 createImageBitmap 對檔案 throw(a7 疑點)→ 退到 Image()
+          console.log("[loadRawImage] BITMAP_FAILED, fallback to Image()", e);
         }
+      } else {
+        console.log("[loadRawImage] createImageBitmap unavailable, fallback to Image()");
       }
-      // fallback:Image() + objectURL、現代瀏覽器 <img> 同樣自動轉正、不設 image-orientation
-      return await new Promise((resolve, reject) => {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => resolve({
-          source: img, w: img.naturalWidth, h: img.naturalHeight,
-          cleanup: () => URL.revokeObjectURL(url)
-        });
-        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("圖片載入失敗")); };
-        img.src = url;
-      });
+
+      // Path 2: Image() + objectURL
+      try {
+        const r = await loadViaObjectURL(file);
+        console.log("[loadRawImage] Image fallback OK");
+        return r;
+      } catch (e) {
+        console.log("[loadRawImage] IMAGE_LOAD_FAILED, fallback to FileReader", e);
+      }
+
+      // Path 3: FileReader → dataURL → Image(最後一層、相容性最高)
+      console.log("[loadRawImage] using FileReader fallback");
+      try {
+        const r = await loadViaFileReader(file);
+        console.log("[loadRawImage] FileReader fallback OK");
+        return r;
+      } catch (e) {
+        // 三層都掛、拋出最後一層的精確錯誤給上層
+        throw (e instanceof Error ? e : new Error("FILEREADER_FAILED: " + e));
+      }
     }
 
     async function compressPhoto(file) {
@@ -2248,10 +2317,14 @@
             compressedDim: `${r.width}x${r.height}`, reducedPct: pct, ms
           });
         } catch (err) {
+          // a7 修:loadRawImage 三層 fallback 帶 ERROR_TYPE tag、UI 顯示 type、Console 印詳細 stack
+          const KNOWN_TAGS = ["BITMAP_FAILED", "IMAGE_LOAD_FAILED", "FILEREADER_FAILED"];
+          const tag = (err.message || "").split(":")[0];
           let msg;
           if      (err.message === "HEIC_NOT_SUPPORTED") msg = "這張是 HEIC 格式、請換一張 JPG 照片";
           else if (err.message === "PHOTO_TOO_LARGE")    msg = "照片太大、請換一張";
           else if (err.message === "CANVAS_TOBLOB_NULL") msg = "這張照片無法處理、請換一張";
+          else if (KNOWN_TAGS.includes(tag))             msg = "壓縮失敗:" + tag;
           else                                            msg = "壓縮失敗:" + err.message;
           info.textContent = "⚠ " + msg;
           compImg.removeAttribute("src");
