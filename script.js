@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton } from "./post-likes.js";   // 貼文按讚共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton } from "./post-likes.js";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -288,7 +288,6 @@ function createPostCard(post, membersMap, deviceId) {
 
   const photos = Array.isArray(post.photos) ? post.photos : [];
   const first = photos[0];
-  const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;  // 留言這輪純顯示
 
   // 照片區:v1 先只載第一張(lazy、data-photo-fileid 等 observer 觸發);多張角落標 1/N
   const mediaHtml = first
@@ -315,7 +314,9 @@ function createPostCard(post, membersMap, deviceId) {
     <div class="post__body">
       <div class="post__likes">
         <button class="post-like-btn" aria-label="按讚" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;line-height:1;vertical-align:-3px;">🤍</button>
-        <span class="post-like-count">0</span> 個讚 · 💬 ${formatCount(commentCount)} 則留言
+        <span class="post-like-count">0</span> 個讚
+        · <button class="post-comment-btn" aria-label="留言" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;line-height:1;vertical-align:-3px;">💬</button>
+        <span class="post-comment-count">0</span> 則留言
       </div>
       ${post.text
         ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>`
@@ -330,6 +331,20 @@ function createPostCard(post, membersMap, deviceId) {
     countEl: article.querySelector(".post-like-count"),
     db, postId: post.id, likes: post.likes, deviceId,
     onError: () => showToast("按讚失敗、請再試")
+  });
+
+  // 💬 接共用 wireCommentButton(身分用首頁的 ME_KEY / openIdentityModal)
+  wireCommentButton({
+    btn: article.querySelector(".post-comment-btn"),
+    countEl: article.querySelector(".post-comment-count"),
+    db, post,
+    getIdentity: () => {
+      const id = getMyId(); if (!id) return null;
+      const me = getMyMember();
+      return { memberId: id, authorName: (me && (me.name || me.nickname)) || "家人" };
+    },
+    ensureIdentity: (cb) => openIdentityModal(() => cb()),
+    showToast
   });
 
   return article;
@@ -348,12 +363,6 @@ function timeAgo(ts) {
   if (sec < 3600)  return Math.floor(sec / 60) + " 分鐘前";
   if (sec < 86400) return Math.floor(sec / 3600) + " 小時前";
   return Math.floor(sec / 86400) + " 天前";
-}
-
-function formatCount(n) {
-  if (n >= 10000) return `${(n / 10000).toFixed(1)} 萬`;
-  if (n >= 1000)  return `${(n / 1000).toFixed(1)}K`;
-  return String(n);
 }
 
 /* 文字 / 屬性防注入(家人輸入的 text、名字可能含特殊字元;規則 4)*/

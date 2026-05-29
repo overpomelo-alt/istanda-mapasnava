@@ -1,11 +1,19 @@
 /* ============================================================
    Istanda Mapasnava · post-likes.js
-   貼文按讚共用模組(規則 2):首頁(script.js)與個人頁(member.html)的 ❤️ 都用這支,
-   toggle 寫入邏輯只在這裡一處。兩頁卡片渲染各自一份(渲染情境不同),但按讚行為共用。
+   貼文互動共用模組(規則 2):首頁(script.js)與個人頁(member.html)共用。
+   - 按讚:togglePostLike(唯一寫入端)+ wireLikeButton
+   - 留言:addPostComment(唯一寫入端)+ wireCommentButton + 模組自管的留言 sheet
+   兩頁卡片渲染各自一份(情境不同),但按讚/留言「寫入 + sheet」邏輯只在這一處。
+   身分(我是誰)由各頁透過 callback 提供(getIdentity / ensureIdentity)、本模組不綁特定頁。
    ============================================================ */
 import {
   doc, updateDoc, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 // 裝置識別:跟 member.html Task 3 同一個 localStorage key、確保同一台手機跨頁按讚一致
 const DEVICE_ID_KEY = "istanda_device_id";
@@ -61,5 +69,143 @@ export function wireLikeButton(opts) {
     } finally {
       busy = false;
     }
+  });
+}
+
+/* ============================================================
+   留言(唯一寫入端 + 模組自管 sheet)
+   ⚠️ createdAt 用 new Date()(client 時間)、不可用 serverTimestamp:
+      Firestore 不允許在「陣列元素裡」用 serverTimestamp、arrayUnion 會丟錯。
+      (member.html Task 3 錄音留言也是這樣寫。)
+   ============================================================ */
+export async function addPostComment(db, postId, comment) {
+  await updateDoc(doc(db, "posts", postId), { comments: arrayUnion(comment) });
+}
+
+// 模組自管的單例留言 sheet(首頁/個人頁共用、第一次用才建、樣式在 style.css 的 .pcs-*)
+let _sheet = null;
+let _state = null;   // 當前開啟的 { db, post, getIdentity, ensureIdentity, onAdded, showToast, comments }
+
+function ensureSheet() {
+  if (_sheet) return _sheet;
+  const el = document.createElement("div");
+  el.className = "pcs";
+  el.hidden = true;
+  el.innerHTML = `
+    <div class="pcs__backdrop" data-pcs-close></div>
+    <div class="pcs__panel">
+      <div class="pcs__header">
+        <div class="pcs__title">留言</div>
+        <button class="pcs__close" data-pcs-close type="button" aria-label="關閉">✕</button>
+      </div>
+      <div class="pcs__list" id="pcsList"></div>
+      <div class="pcs__inputrow">
+        <textarea class="pcs__input" id="pcsInput" rows="1" placeholder="說點什麼…"></textarea>
+        <button class="pcs__submit" id="pcsSubmit" type="button">送出</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelectorAll("[data-pcs-close]").forEach(b => b.addEventListener("click", closeSheet));
+  el.querySelector("#pcsSubmit").addEventListener("click", onSubmit);
+  _sheet = el;
+  return el;
+}
+
+function closeSheet() {
+  if (_sheet) _sheet.hidden = true;
+  _state = null;
+}
+
+function renderCommentList(comments) {
+  const list = _sheet.querySelector("#pcsList");
+  if (!comments || comments.length === 0) {
+    list.innerHTML = `<div class="pcs__empty">還沒有留言、第一個說點什麼吧</div>`;
+    return;
+  }
+  list.innerHTML = "";
+  comments.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "pcs__row";
+    row.innerHTML = `<div class="pcs__author">${esc(c.authorName || "家人")}</div>` +
+                    `<div class="pcs__text">${esc(c.text || "")}</div>`;
+    list.appendChild(row);
+  });
+}
+
+/* 開留言 sheet。opts = { db, post, getIdentity, ensureIdentity, onAdded, showToast, prefillText? }
+   getIdentity():有選過「我是誰」回 { memberId, authorName }、沒選回 null
+   ensureIdentity(cb):開該頁的身分選擇器、選完呼叫 cb */
+export function openPostCommentSheet(opts) {
+  ensureSheet();
+  _state = opts;
+  _state.comments = Array.isArray(opts.post.comments) ? opts.post.comments.slice() : []; // 顯示用快照
+  renderCommentList(_state.comments);
+  const input = _sheet.querySelector("#pcsInput");
+  input.value = opts.prefillText || "";   // 身分選完重開時帶回草稿
+  _sheet.hidden = false;
+  setTimeout(() => input.focus(), 50);
+}
+
+async function onSubmit() {
+  const opts = _state;
+  if (!opts) return;
+  const input = _sheet.querySelector("#pcsInput");
+  const submit = _sheet.querySelector("#pcsSubmit");
+  const text = (input.value || "").trim();
+  if (!text) return;                                  // 規則 4:空白不送
+
+  // 身分:沒選過「我是誰」→ 關 sheet、選身分、選完帶草稿重開(避免和身分 modal 疊 z-index)
+  const ident = opts.getIdentity();
+  if (!ident) {
+    const draft = text;
+    const carry = opts;
+    closeSheet();
+    carry.ensureIdentity(() => openPostCommentSheet(Object.assign({}, carry, { prefillText: draft })));
+    return;
+  }
+
+  const comment = {
+    deviceId: getDeviceId(),
+    memberId: ident.memberId,
+    authorName: ident.authorName,
+    text,
+    createdAt: new Date()                             // ⚠️ 不可 serverTimestamp(陣列元素)
+  };
+  submit.disabled = true;
+  opts.comments.push(comment);                        // 樂觀顯示
+  renderCommentList(opts.comments);
+  input.value = "";
+  try {
+    await addPostComment(opts.db, opts.post.id, comment);
+    if (typeof opts.onAdded === "function") opts.onAdded(comment);   // 卡片留言數 +1 + post.comments 同步
+  } catch (err) {
+    opts.comments.pop();                              // 還原 + 把字還給使用者(規則 4)
+    renderCommentList(opts.comments);
+    input.value = text;
+    console.warn("[comment] 寫入失敗、已還原:", err && err.message ? err.message : err);
+    if (typeof opts.showToast === "function") opts.showToast("留言送出失敗、請再試");
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+/* 把一顆 💬 按鈕接上:顯示留言數 + 點擊開 sheet。
+   opts = { btn, countEl, db, post, getIdentity, ensureIdentity, showToast } */
+export function wireCommentButton(opts) {
+  const { btn, countEl, post } = opts;
+  if (!btn) return;
+  if (countEl) countEl.textContent = String(Array.isArray(post.comments) ? post.comments.length : 0);
+  btn.addEventListener("click", () => {
+    openPostCommentSheet({
+      db: opts.db, post,
+      getIdentity: opts.getIdentity,
+      ensureIdentity: opts.ensureIdentity,
+      showToast: opts.showToast,
+      onAdded: (c) => {
+        if (!Array.isArray(post.comments)) post.comments = [];
+        post.comments.push(c);                        // 同步 local post、count 更新
+        if (countEl) countEl.textContent = String(post.comments.length);
+      }
+    });
   });
 }
