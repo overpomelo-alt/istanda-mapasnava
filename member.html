@@ -849,6 +849,26 @@
       padding: 14px 16px;
       font-size: 14px; line-height: 1.6; color: var(--text-soft);
     }
+    /* 2b-4c:頂部背景上傳進度條(fixed、modal 外、三狀態變色)*/
+    .upload-bar {
+      position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: var(--max-w);
+      z-index: 1500;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 9px 14px;
+      font-size: 13px; font-weight: 600; font-family: var(--font-sans);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    }
+    .upload-bar--progress { background: var(--accent); }   /* 薑黃 */
+    .upload-bar--done     { background: #1a9c4e; }          /* 綠 */
+    .upload-bar--fail     { background: #dc2743; }          /* 紅 */
+    .upload-bar__close {
+      background: rgba(255, 255, 255, 0.25); border: none; color: #fff;
+      width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
+      font-size: 12px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
   </style>
 </head>
 <body>
@@ -970,6 +990,12 @@
 
   <!-- ============ 全域 Toast (複用 style.css 的 .global-toast) ============ -->
   <div id="globalToast" class="global-toast"></div>
+
+  <!-- ============ Task 5 2b-4c:頂部背景上傳進度條(fixed 頁面頂、modal 外)============ -->
+  <div id="uploadBar" class="upload-bar" hidden>
+    <span class="upload-bar__text" id="uploadBarText">上傳中…</span>
+    <button class="upload-bar__close" id="uploadBarClose" type="button" hidden aria-label="關閉">✕</button>
+  </div>
 
   <!-- ============ 子步 3b:留言 Bottom Sheet(預設 hidden、點 💬 開啟)============ -->
   <div id="commentSheet" class="comment-sheet" hidden>
@@ -2639,10 +2665,11 @@
     }
 
     /* ============================================================
-       Task 5 Step 2b-4b:發貼文 Modal 全鏈 — 拍照/相簿選 → 分享 → 上傳 Drive + 差集 → 寫 Firestore posts + postCount + 收尾
-       流程:差集 pre-seed → sequential 上傳 + claimNewFileId → addDoc posts(serverTimestamp)→
-            members.postCount+1(+首次回填 driveFolderId)→ 關 modal + 清 postPhotos(規則 5)。
-       防重送 isPosting 涵蓋上傳+寫 DB;失敗分階段提示、不關 modal、保留照片(規則 4)。
+       Task 5 Step 2b-4c:發貼文 Modal 全鏈 + 背景上傳 — 分享後立刻關 modal、上傳改背景 + 頂部進度條
+       流程:分享 → snapshot(compressed Blob 本體 + caption)→ 立刻 closePostModal → runBackgroundUpload:
+            差集 pre-seed → sequential 上傳 + claimNewFileId → addDoc posts(serverTimestamp)→
+            members.postCount+1(+首次回填 driveFolderId)→ 頂部進度條 done/fail。
+       並行防護 isBackgroundUploading:上傳中擋開新 modal(同時只能傳一篇、規則 4);失敗策略 B(重發)。
        後端 doPost 已支援照片(key "audio" + filename .jpg → image/jpeg、apps-script/istanda-mapasnava-receiver.gs)。
        上傳走新工具 postBlobToAppsScript + claimNewFileId、handleUpload 舊錄音一行不動(規則 9);
        compressFromImg / compressPhoto / loadRawImage 四層 / waitDisplayImgReady / readExifOrientation 一字未動。
@@ -2679,9 +2706,11 @@
       const POST_MAX_PHOTOS = 9;   // 一篇貼文照片上限(規則 1:給名字、之後改一處)
       // 已選照片暫存:每筆 { original:File(原始), compressed:Blob(壓縮後、2b-4 上傳用), previewUrl:string(縮圖) }。
       const postPhotos = [];
+      let isBackgroundUploading = false;   // 2b-4c:背景上傳中旗標(同時只能傳一篇、規則 4)
 
       /* ---- 開關 ---- */
       function openPostModal() {
+        if (isBackgroundUploading) { showToast("上一篇還在上傳、請稍候", 2600); return; } // 並行防護:擋第二篇(規則 4)
         modal.hidden = false;
         document.body.style.overflow = "hidden";   // 鎖背景捲動(規則 5:關閉時還原)
       }
@@ -2988,77 +3017,82 @@
         }
       }
 
-      /* ---- 分享 → 上傳 Drive + 差集 → 寫 Firestore posts + postCount + 回填 → 收尾 ---- */
-      let isPosting = false;   // 防重送:涵蓋「上傳 + 寫 DB」整段(規則 4/5)
-      shareBtn.addEventListener("click", async () => {
-        if (isPosting || postPhotos.length === 0) return;
-        const mId = memberId;
-        if (!mId) { showToast("找不到成員、請重新整理頁面再試", 3000); return; }  // 規則 4
+      /* ---- 頂部上傳進度條(modal 外、背景上傳用)---- */
+      const uploadBar      = document.getElementById("uploadBar");
+      const uploadBarText  = document.getElementById("uploadBarText");
+      const uploadBarClose = document.getElementById("uploadBarClose");
+      let uploadBarTimer = null;
+      // state: "progress"(薑黃)/ "done"(綠、2 秒淡出)/ "fail"(紅、給手動關、不自動消失)
+      function setUploadBar(state, text) {
+        clearTimeout(uploadBarTimer);
+        uploadBar.hidden = false;
+        uploadBar.className = "upload-bar upload-bar--" + state;
+        uploadBarText.textContent = text;
+        uploadBarClose.hidden = (state !== "fail");
+        if (state === "done") uploadBarTimer = setTimeout(() => { uploadBar.hidden = true; }, 2000);
+      }
+      if (uploadBarClose) uploadBarClose.addEventListener("click", () => { uploadBar.hidden = true; });
 
-        isPosting = true;
-        shareBtn.disabled = true;
-        const mName = (memberData && memberData.name) || "";
-        const driveFolderId = (memberData && memberData.driveFolderId) || "";
-        const blobs = postPhotos.map(p => p.compressed);  // 快照:避免上傳途中陣列被動(規則 4)
-        const total = blobs.length;
+      /* ---- 背景上傳一篇貼文(modal 已關、讀 snapshot job、不碰已清空的 modal 狀態)----
+         job = { blobs:[Blob], mId, mName, driveFolderId, caption }
+         上傳迴圈 + 寫 DB 與 2b-4b 完全相同邏輯、只是搬到背景 + 頂部進度條(規則 9:邏輯不動)。 */
+      async function runBackgroundUpload(job) {
+        isBackgroundUploading = true;
+        const total = job.blobs.length;
         const claimed = [];
-        const uploaded = [];        // [{fileId, filename, parentFolderId?}]
+        const uploaded = [];          // [{fileId, filename, parentFolderId?}]
         let backfillFolderId = null;
-
         try {
-          // ── 階段 1:上傳 Drive(失敗 → 不寫 DB、不關 modal、保留照片)──
-          let uploadOk = false;
-          try {
-            await seedExistingFileIds(mId, driveFolderId, claimed);  // 差集 pre-seed
-            for (let i = 0; i < total; i++) {              // sequential、絕不 Promise.all
-              shareBtn.textContent = `上傳中 ${i + 1}/${total}`;
-              await postBlobToAppsScript(blobs[i], `${mId}.jpg`, mId, mName, driveFolderId); // 不重壓
-              await new Promise(r => setTimeout(r, 300));   // 降 race、給 Drive 寫入緩衝
-              const f = await claimNewFileId(mId, driveFolderId, claimed);
-              claimed.push(f.fileId);
-              uploaded.push(f);
-              if (!driveFolderId && !backfillFolderId && f.parentFolderId) backfillFolderId = f.parentFolderId;
-            }
-            uploadOk = true;
-          } catch (err) {
-            console.error("[2b-4b] 上傳失敗:", err && err.message ? err.message : err);
-            showToast("第 " + (uploaded.length + 1) + " 張上傳失敗、請再試", 3500); // 規則 4:停迴圈、不關 modal
+          setUploadBar("progress", `上傳中 0/${total}`);
+          await seedExistingFileIds(job.mId, job.driveFolderId, claimed);   // 差集 pre-seed
+          for (let i = 0; i < total; i++) {              // sequential、絕不 Promise.all
+            setUploadBar("progress", `上傳中 ${i + 1}/${total}`);
+            await postBlobToAppsScript(job.blobs[i], `${job.mId}.jpg`, job.mId, job.mName, job.driveFolderId); // 不重壓
+            await new Promise(r => setTimeout(r, 300));   // 降 race、給 Drive 寫入緩衝
+            const f = await claimNewFileId(job.mId, job.driveFolderId, claimed);
+            claimed.push(f.fileId);
+            uploaded.push(f);
+            if (!job.driveFolderId && !backfillFolderId && f.parentFolderId) backfillFolderId = f.parentFolderId;
           }
-          if (!uploadOk) return;
-
-          // ── 階段 2:寫 Firestore posts + members(失敗 → 提示、不關 modal、保留照片)──
-          shareBtn.textContent = "發布中…";
-          try {
-            const photos = uploaded.map(u => ({ fileId: u.fileId, filename: u.filename })); // 對齊 schema、不帶 parentFolderId
-            await addDoc(collection(db, "posts"), {
-              memberId: mId,
-              photos,
-              audioFileId: null,                 // 純照片、配音已砍
-              text: caption.value || "",
-              createdAt: serverTimestamp(),       // ⚠️ serverTimestamp、非 client Date
-              likes: [],
-              comments: []
-            });
-            const memberUpdate = { postCount: increment(1) };  // 舊文件無此欄位 → 自動從 0 起(規則 8)
-            if (!driveFolderId && backfillFolderId) memberUpdate.driveFolderId = backfillFolderId; // 首次發文回填
-            await updateDoc(doc(db, "members", mId), memberUpdate);
-            if (!driveFolderId && backfillFolderId && memberData) memberData.driveFolderId = backfillFolderId; // 本地同步、下次走快路徑
-          } catch (err) {
-            console.error("[2b-4b] 寫 Firestore 失敗:", err && err.message ? err.message : err);
-            showToast("貼文儲存失敗、請再試", 3500);
-            // TODO(6/15 後):此時 Drive 已寫入 N 張、重按分享會再上傳一輪 → Drive 重複。
-            //   機率低(只在 Drive 成功但 Firestore 失敗的窄窗)、暫不解;之後可考慮上傳前先寫 posts 佔位 / 去重。
-            return;
-          }
-
-          // ── 階段 3:成功收尾(規則 5:清乾淨、下次開是空狀態)──
-          closePostModal();   // 內含 clearPostPhotos(revoke previewUrl)+ 清 caption + render 回空 + 還原捲動
-          showToast("貼文已發布!", 3000);
+          // 寫 Firestore posts + members(createdAt serverTimestamp、postCount+1、首次回填 driveFolderId)
+          const photos = uploaded.map(u => ({ fileId: u.fileId, filename: u.filename })); // 對齊 schema
+          await addDoc(collection(db, "posts"), {
+            memberId: job.mId, photos, audioFileId: null, text: job.caption,
+            createdAt: serverTimestamp(), likes: [], comments: []
+          });
+          const memberUpdate = { postCount: increment(1) };  // 舊文件無此欄位 → 自動從 0 起(規則 8)
+          if (!job.driveFolderId && backfillFolderId) memberUpdate.driveFolderId = backfillFolderId;
+          await updateDoc(doc(db, "members", job.mId), memberUpdate);
+          if (!job.driveFolderId && backfillFolderId && memberData) memberData.driveFolderId = backfillFolderId;
+          setUploadBar("done", "貼文已發布 ✅");
+        } catch (err) {
+          console.error("[2b-4c] 背景上傳失敗:", err && err.message ? err.message : err);
+          setUploadBar("fail", "上傳失敗、請再試");
+          // 失敗策略 = B(重發):丟棄 job(區域變數、return 後即釋放)、不自動重試。
+          // 理由:naive 重傳同一批會在 Drive 製造重複檔(部分已上傳);重發 = 乾淨、可靠、簡單。
+          // TODO(6/15 後):若要保留照片做可續傳重試,需記錄 uploaded 進度 + 跳過已傳,複雜、暫不做。
         } finally {
-          isPosting = false;
-          shareBtn.disabled = postPhotos.length === 0;
-          shareBtn.textContent = "分享";
+          isBackgroundUploading = false;   // 解旗標、允許下一篇
         }
+      }
+
+      /* ---- 分享 → 先關 modal + 清空 → 背景上傳(north-star:發完馬上能繼續滑)---- */
+      shareBtn.addEventListener("click", () => {
+        if (postPhotos.length === 0) return;
+        if (isBackgroundUploading) { showToast("上一篇還在上傳、請稍候", 2600); return; } // 並行防護(規則 4)
+        const mId = memberId;
+        if (!mId) { showToast("找不到成員、請重新整理頁面再試", 3000); return; }
+        // snapshot:存 compressed Blob 本體(背景上傳要用、不 revoke)+ caption + member 資訊。
+        // ⚠️ closePostModal 會 revoke previewUrl(縮圖 objectURL)、但不動 compressed Blob 本體、job 仍可用。
+        const job = {
+          blobs: postPhotos.map(p => p.compressed),
+          mId,
+          mName: (memberData && memberData.name) || "",
+          driveFolderId: (memberData && memberData.driveFolderId) || "",
+          caption: caption.value || ""
+        };
+        closePostModal();          // 立刻關 + 清 postPhotos(revoke previewUrl)+ 清 caption + render 回空
+        runBackgroundUpload(job);  // 不 await、背景跑、頂部進度條顯示
       });
 
       renderPostPhotos();   // 初始:空狀態 + 分享 disabled
