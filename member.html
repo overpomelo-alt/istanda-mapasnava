@@ -2469,6 +2469,37 @@
         dlog("[file] name=" + file.name + " type=" + file.type +
              " size=" + file.size + " lastModified=" + file.lastModified);
 
+        /* a7 十一輪:bytes 層探針(插在最前面、不解碼、不建 objectURL、不畫 canvas)
+           目的:把「拿不到 bytes」vs「拿得到但解不了」一刀切開。
+           - 探針 1:讀前 64KB → content provider 給不給 bytes?
+           - 探針 2:讀整檔 → byteLength 對不對得上 file.size?(metadata vs 實際 bytes)
+           判讀:探針 2 失敗 or byteLength≠size = bytes 層問題(雲端/picker 路由);
+                探針 2 成功且一致但圖仍壓不出 = 解碼/格式層問題(HEIF 之類)。
+           純診斷、不影響後面 compressFromImg + 四層鏈。Step 2b 連同測試區一起拆。*/
+        const PROBE_HEAD_BYTES = 65536; // 64KB、只測「拿不拿得到開頭 bytes」
+        const pt1 = performance.now();
+        try {
+          const head = await file.slice(0, PROBE_HEAD_BYTES).arrayBuffer();
+          dlog("[probe1] slice(0,64KB).arrayBuffer OK 拿到=" + head.byteLength +
+               "B " + Math.round(performance.now() - pt1) + "ms");
+        } catch (e) {
+          dlog("[probe1] slice FAIL " + (e && e.name ? e.name : "?") +
+               " | " + (e && e.message ? e.message : e) +
+               " " + Math.round(performance.now() - pt1) + "ms");
+        }
+        const pt2 = performance.now();
+        try {
+          const all = await file.arrayBuffer();
+          const match = all.byteLength === file.size ? "✅一致" : "❌不一致";
+          dlog("[probe2] arrayBuffer OK 拿到=" + all.byteLength +
+               "B vs size=" + file.size + " " + match +
+               " " + Math.round(performance.now() - pt2) + "ms");
+        } catch (e) {
+          dlog("[probe2] arrayBuffer FAIL " + (e && e.name ? e.name : "?") +
+               " | " + (e && e.message ? e.message : e) +
+               " " + Math.round(performance.now() - pt2) + "ms");
+        }
+
         clearPreviousUrls();
         result.hidden = false;
         info.textContent = "處理中…";
