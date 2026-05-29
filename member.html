@@ -869,6 +869,21 @@
       font-size: 12px; line-height: 1;
       display: flex; align-items: center; justify-content: center;
     }
+    /* Task 5:個人頁分頁(貼文 / 純錄音)*/
+    .member-tabs {
+      display: flex; gap: 4px;
+      max-width: var(--max-w); margin: 8px auto 0;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .member-tab {
+      flex: 1; padding: 12px 8px;
+      background: none; border: none; cursor: pointer;
+      font: 600 14px/1 var(--font-sans); color: var(--text-muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .member-tab--active { color: var(--text); border-bottom-color: var(--text); }
   </style>
 </head>
 <body>
@@ -935,8 +950,21 @@
         <div class="playback-hint" id="playbackHint">錄好了、確認後上傳</div>
       </section>
 
-      <!-- 過去錄音清單(子步 4a:fetch ?action=list + render、子步 4b:點播放)-->
-      <section class="recordings-section">
+      <!-- Task 5:個人頁分頁(貼文 / 純錄音)、預設貼文(north-star 貼文為主)-->
+      <div class="member-tabs" role="tablist">
+        <button class="member-tab member-tab--active" id="tabPosts" type="button" role="tab">📷 貼文</button>
+        <button class="member-tab" id="tabRecordings" type="button" role="tab">🎙 純錄音</button>
+      </div>
+
+      <!-- 貼文 pane(預設顯示;此成員 posts、卡片 member 版、照片走 ?id= 代理)-->
+      <section class="posts-pane" id="postsPane">
+        <div id="memberPostsList">
+          <div class="recordings-empty">貼文載入中…</div>
+        </div>
+      </section>
+
+      <!-- 純錄音 pane(預設隱藏;原「過去錄音」清單、邏輯一行不動、只切 hidden)-->
+      <section class="recordings-section" id="recordingsPane" hidden>
         <div class="section-title">過去錄音</div>
         <audio id="recordingsAudio" preload="auto"></audio>
         <div id="recordingsList">
@@ -1109,7 +1137,7 @@
     import {
       getFirestore, doc, getDoc, getDocs,
       collection, addDoc, updateDoc, serverTimestamp, increment,
-      query, where, onSnapshot, arrayUnion, arrayRemove
+      query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -1216,6 +1244,7 @@
         await loadRecordings();     // 子步 4a 初始 load;Task 4 S0-5:改 await、確保清單 render 完才 deep link
         handleDeepLink();           // Task 4 Step 3:被分享的那筆 → scroll + 金邊高亮
         setupRecordingsListener();  // 子步 3a:onSnapshot 接管後續更新(likes / comments / 新文件)
+        loadMemberPosts();          // Task 5:載入此成員貼文(貼文 tab、預設顯示)
       } catch (err) {
         console.error(err);
         showError("連線出問題", "讀不到家族資料,請檢查網路後重新整理。");
@@ -3096,6 +3125,136 @@
       });
 
       renderPostPhotos();   // 初始:空狀態 + 分享 disabled
+    })();
+
+    /* ============================================================
+       Task 5:個人頁「貼文」tab — 此成員 posts 渲染
+       規則 11 判斷(任務 0):首頁 createPostCard 在 script.js(另一支 module、已驗證運作),
+       真正共用得 import 進 script.js = 動到首頁運作中程式(規則 9 禁區);member.html 又是
+       單一作者(author 固定 = memberData)、且已有自己的 escapeHtml/formatCommentTime/APPS_SCRIPT_URL。
+       → 採規則 11「複製一份 member 版 + TODO」、不動首頁。
+       TODO(6/15 後):若要統一,把 post-card 渲染抽成共用 ES module 給兩頁 import。
+       ============================================================ */
+    function postTimeMs(ts) {   // 排序用:Firestore Timestamp / Date / number → ms
+      if (!ts) return 0;
+      const d = ts.toDate ? ts.toDate() : (ts.seconds != null ? new Date(ts.seconds * 1000) : new Date(ts));
+      return d.getTime() || 0;
+    }
+
+    async function loadMemberPosts() {
+      const listEl = document.getElementById("memberPostsList");
+      if (!listEl || !memberId) return;
+      try {
+        let docs;
+        try {
+          // 主路徑:where + orderBy(複合查詢、需 Firestore 複合索引 memberId+createdAt)
+          const snap = await getDocs(query(
+            collection(db, "posts"),
+            where("memberId", "==", memberId),
+            orderBy("createdAt", "desc")
+          ));
+          docs = snap.docs;
+        } catch (idxErr) {
+          // 索引未建 → failed-precondition。退回只 where + client 端排序、頁面照常顯示(規則 4);
+          // console 的 idxErr 訊息會附「建立索引」連結(見報告)。
+          console.warn("[member posts] 複合查詢失敗(可能未建索引)、退回 client 排序:", idxErr && idxErr.message ? idxErr.message : idxErr);
+          const snap = await getDocs(query(collection(db, "posts"), where("memberId", "==", memberId)));
+          docs = snap.docs.slice().sort((a, b) => postTimeMs(b.data().createdAt) - postTimeMs(a.data().createdAt));
+        }
+        renderMemberPosts(docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.warn("[member posts] 載入失敗:", err && err.message ? err.message : err);
+        renderMemberPosts([]);   // 規則 4:不爆、走空狀態
+      }
+    }
+
+    function renderMemberPosts(posts) {
+      const listEl = document.getElementById("memberPostsList");
+      if (!listEl) return;
+      listEl.innerHTML = "";
+      if (!posts || posts.length === 0) {
+        listEl.innerHTML = `<div class="recordings-empty">還沒有貼文</div>`;
+        return;
+      }
+      // 照片 lazy:可視才向 ?id= 代理抓 base64(效能:照片代理較重)
+      const io = new IntersectionObserver((entries, obs) => {
+        entries.forEach(en => { if (en.isIntersecting) { obs.unobserve(en.target); loadMemberPostPhoto(en.target); } });
+      }, { rootMargin: "300px" });
+      posts.forEach(p => {
+        const card = createMemberPostCard(p);
+        listEl.appendChild(card);
+        const ph = card.querySelector("img[data-photo-fileid]");
+        if (ph) io.observe(ph);
+      });
+    }
+
+    /* 此頁單一作者:author 固定 = memberData(不需 members map)。
+       重用既有 escapeHtml + formatCommentTime;照片走 ?id= 代理(同錄音、私有檔擁有者讀)。 */
+    function createMemberPostCard(post) {
+      const article = document.createElement("article");
+      article.className = "post";
+      const authorName = (memberData && (memberData.name || memberData.nickname)) || "家人";
+      const authorInitials = (memberData && memberData.initials) || "??";
+      const photos = Array.isArray(post.photos) ? post.photos : [];
+      const first = photos[0];
+      const likeCount = Array.isArray(post.likes) ? post.likes.length : 0;        // 防 NaN:陣列取 length
+      const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
+      const mediaHtml = first
+        ? `<img data-photo-fileid="${escapeHtml(first.fileId)}" alt="${escapeHtml(authorName)} 的照片" />
+           ${photos.length > 1 ? `<span style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>` : ""}`
+        : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;">(這篇沒有照片)</div>`;
+      article.innerHTML = `
+        <header class="post__header">
+          <div class="post__user">
+            <div class="post__avatar-ring"><div class="post__avatar-inner">
+              <div class="post__avatar">${escapeHtml(authorInitials)}</div>
+            </div></div>
+            <div class="post__meta"><span class="post__name">${escapeHtml(authorName)}</span></div>
+          </div>
+        </header>
+        <div class="post__media">${mediaHtml}</div>
+        <div class="post__body">
+          <div class="post__likes">❤️ ${likeCount} 個讚 · 💬 ${commentCount} 則留言</div>
+          ${post.text ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>` : ""}
+          <p class="post__time">${formatCommentTime(post.createdAt)}</p>
+        </div>
+      `;
+      return article;
+    }
+
+    async function loadMemberPostPhoto(imgEl) {
+      const fileId = imgEl.getAttribute("data-photo-fileid");
+      if (!fileId) return;
+      try {
+        const resp = await fetch(`${APPS_SCRIPT_URL}?id=${encodeURIComponent(fileId)}`);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const base64 = await resp.text();
+        if (!base64 || base64.length < 50) throw new Error("empty");
+        imgEl.src = `data:image/jpeg;base64,${base64}`;   // 照片一律 jpeg
+      } catch (err) {
+        console.warn("[member posts] 照片載入失敗 fileId=" + fileId, err && err.message ? err.message : err);
+        const media = imgEl.closest(".post__media");
+        if (media) media.innerHTML =
+          `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;">照片載入失敗</div>`;
+      }
+    }
+
+    /* tab 切換(預設貼文)。純錄音 pane = 既有 recordings-section、JS 邏輯一行不動、只切 hidden */
+    (function setupMemberTabs() {
+      const tabPosts  = document.getElementById("tabPosts");
+      const tabRec    = document.getElementById("tabRecordings");
+      const postsPane = document.getElementById("postsPane");
+      const recPane   = document.getElementById("recordingsPane");
+      if (!tabPosts || !tabRec || !postsPane || !recPane) return;
+      function activate(which) {
+        const posts = which === "posts";
+        postsPane.hidden = !posts;
+        recPane.hidden = posts;
+        tabPosts.classList.toggle("member-tab--active", posts);
+        tabRec.classList.toggle("member-tab--active", !posts);
+      }
+      tabPosts.addEventListener("click", () => activate("posts"));
+      tabRec.addEventListener("click", () => activate("recordings"));
     })();
 
     main();
