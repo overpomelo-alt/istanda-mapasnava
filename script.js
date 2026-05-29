@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton } from "./post-likes.js";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -280,6 +280,7 @@ async function loadCardPhoto(imgEl) {
 function createPostCard(post, membersMap, deviceId) {
   const article = document.createElement("article");
   article.className = "post";
+  article.setAttribute("data-post-id", post.id || "");   // 深連結 scroll 用
 
   // 作者:memberId join members(renderFeed 已備好 map、不每張各查、規則 3)
   const author = (membersMap && membersMap.get(post.memberId)) || {};
@@ -317,6 +318,7 @@ function createPostCard(post, membersMap, deviceId) {
         <span class="post-like-count">0</span> 個讚
         · <button class="post-comment-btn" aria-label="留言" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;line-height:1;vertical-align:-3px;">💬</button>
         <span class="post-comment-count">0</span> 則留言
+        · <button class="post-share-btn" aria-label="分享" style="background:none;border:none;cursor:pointer;font-size:15px;padding:0;line-height:1;vertical-align:-1px;color:var(--text-soft);">↗️ 分享</button>
       </div>
       ${post.text
         ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>`
@@ -347,7 +349,42 @@ function createPostCard(post, membersMap, deviceId) {
     showToast
   });
 
+  // ↗️ 接共用 wireShareButton(Web Share API → LINE 退路)
+  wireShareButton({ btn: article.querySelector(".post-share-btn"), post, authorName });
+
   return article;
+}
+
+/* 深連結:?post={postId} → 開那篇。在初次 feed 裡 → scroll + 高亮;
+   不在 → getDoc 單獨抓、prepend 到最上;找不到 → toast(規則 4:不整頁壞)。 */
+async function handlePostDeepLink(membersMap) {
+  const pid = getDeepLinkPostId();
+  if (!pid) return;
+  const section = document.getElementById("feedSection");
+  if (!section) return;
+  let card = section.querySelector(`.post[data-post-id="${pid}"]`);
+  if (!card) {
+    try {
+      const snap = await getDoc(doc(db, "posts", pid));
+      if (!snap.exists()) { showToast("這篇貼文找不到了"); clearDeepLinkPostId(); return; }
+      const post = { id: snap.id, ...snap.data() };
+      card = createPostCard(post, membersMap, getDeviceId());
+      const empty = section.querySelector(".feed-loading");
+      if (empty) empty.remove();
+      section.insertBefore(card, section.firstChild);
+      const ph = card.querySelector("img[data-photo-fileid]");
+      if (ph) loadCardPhoto(ph);   // 單獨抓的卡片沒掛 observer、直接載
+    } catch (err) {
+      console.warn("[feed] 深連結貼文載入失敗:", err && err.message ? err.message : err);
+      showToast("這篇貼文找不到了");
+      clearDeepLinkPostId();
+      return;
+    }
+  }
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.add("post--highlight");
+  setTimeout(() => card.classList.remove("post--highlight"), 2000);
+  clearDeepLinkPostId();
 }
 
 /* createdAt(Firestore serverTimestamp)→ 相對時間。
@@ -431,10 +468,12 @@ async function main() {
       );
       const posts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       renderFeed(posts, membersMap);
+      handlePostDeepLink(membersMap);   // 若網址有 ?post= → scroll 到那篇 / 單獨抓
     } catch (err) {
       // posts collection 還沒資料 / 讀取失敗 → 空狀態(規則 4)
       console.warn("posts 讀取失敗或尚無資料:", err && err.message ? err.message : err);
       renderFeed([]);
+      handlePostDeepLink(membersMap);   // 仍試單篇 getDoc(list 失敗但單篇可能在)
     }
 
   } catch (err) {

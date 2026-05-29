@@ -1139,7 +1139,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton } from "./post-likes.js";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -3168,6 +3168,37 @@
         console.warn("[member posts] 載入失敗:", err && err.message ? err.message : err);
         renderMemberPosts([]);   // 規則 4:不爆、走空狀態
       }
+      handleMemberPostDeepLink();   // 若網址有 ?post= → scroll 到那篇 / 單獨抓
+    }
+
+    /* 深連結:?post={postId} → 開那篇(個人頁版)。在貼文清單裡 → scroll + 高亮;
+       不在 → getDoc 單獨抓 prepend;找不到 → toast(規則 4)。 */
+    async function handleMemberPostDeepLink() {
+      const pid = getDeepLinkPostId();
+      if (!pid) return;
+      const listEl = document.getElementById("memberPostsList");
+      if (!listEl) return;
+      let card = listEl.querySelector(`.post[data-post-id="${pid}"]`);
+      if (!card) {
+        try {
+          const snap = await getDoc(doc(db, "posts", pid));
+          if (!snap.exists()) { showToast("這篇貼文找不到了"); clearDeepLinkPostId(); return; }
+          const post = { id: snap.id, ...snap.data() };
+          card = createMemberPostCard(post, getDeviceId());
+          const empty = listEl.querySelector(".recordings-empty");
+          if (empty) empty.remove();
+          listEl.insertBefore(card, listEl.firstChild);
+          const ph = card.querySelector("img[data-photo-fileid]");
+          if (ph) loadMemberPostPhoto(ph);
+        } catch (err) {
+          console.warn("[member posts] 深連結載入失敗:", err && err.message ? err.message : err);
+          showToast("這篇貼文找不到了"); clearDeepLinkPostId(); return;
+        }
+      }
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("post--highlight");
+      setTimeout(() => card.classList.remove("post--highlight"), 2000);
+      clearDeepLinkPostId();
     }
 
     function renderMemberPosts(posts) {
@@ -3196,6 +3227,7 @@
     function createMemberPostCard(post, deviceId) {
       const article = document.createElement("article");
       article.className = "post";
+      article.setAttribute("data-post-id", post.id || "");   // 深連結 scroll 用
       const authorName = (memberData && (memberData.name || memberData.nickname)) || "家人";
       const authorInitials = (memberData && memberData.initials) || "??";
       const photos = Array.isArray(post.photos) ? post.photos : [];
@@ -3220,6 +3252,7 @@
             <span class="post-like-count">0</span> 個讚
             · <button class="post-comment-btn" aria-label="留言" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;line-height:1;vertical-align:-3px;">💬</button>
             <span class="post-comment-count">0</span> 則留言
+            · <button class="post-share-btn" aria-label="分享" style="background:none;border:none;cursor:pointer;font-size:15px;padding:0;line-height:1;vertical-align:-1px;color:var(--text-soft);">↗️ 分享</button>
           </div>
           ${post.text ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>` : ""}
           <p class="post__time">${formatCommentTime(post.createdAt)}</p>
@@ -3245,6 +3278,8 @@
         ensureIdentity: async (cb) => { await ensureMembersLoaded(); openIdentityModalLocal(() => cb()); },
         showToast
       });
+      // ↗️ 接共用 wireShareButton(連結帶 ?id= 與 ?post=、Web Share API → LINE 退路)
+      wireShareButton({ btn: article.querySelector(".post-share-btn"), post, authorName });
       return article;
     }
 
