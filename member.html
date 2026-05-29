@@ -684,7 +684,7 @@
     .photo-test-preview p { font-size: 12px; color: var(--text-muted); margin: 0 0 4px; }
     .photo-test-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
     /* a7 四輪:頁面內診斷面板(聖瑱師手機螢幕直接看、不靠 Console)*/
-    #photoTestDebug {
+    #photoTestDebug, #photoTestDebugB {
       margin: 12px 0 0;
       padding: 8px 10px;
       font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
@@ -770,11 +770,19 @@
       <!-- ⚠️ Step 2a 臨時照片壓縮測試區(Step 2b 拆掉)-->
       <section class="photo-test-section" id="photoTestSection">
         <h3>📷 照片壓縮測試(Step 2a 暫用、Step 2b 拆)</h3>
+        <!-- input A(既有、accept=image/*):iPhone 與 Android 都測 -->
+        <p style="margin:8px 0 4px;font:13px ui-monospace,monospace;">A:照片(現行 accept=image/*)</p>
         <input type="file" accept="image/*" id="photoTestInput">
         <!-- a7 十輪:FormData 直傳測試(純驗證、不存 Drive、不壓縮)-->
         <button type="button" id="formdataTestBtn" style="margin-top:8px;padding:8px 12px;border:1px solid #1a1a1a;background:#fff;border-radius:6px;font:13px ui-monospace,monospace;cursor:pointer;">測試 FormData 直傳</button>
         <!-- a7 四輪:頁面內診斷面板(無 Console 環境也看得到完整路徑) -->
-        <pre id="photoTestDebug" aria-label="診斷"></pre>
+        <pre id="photoTestDebug" aria-label="診斷 A"></pre>
+
+        <!-- a7 十二輪:input B(對照、拿掉 accept、看 Android picker 預設是否改走「我的檔案」)。
+             ⚠️ Android 測試專用、iPhone 行為未知、聖瑱師 iPhone 暫不要測這顆。 -->
+        <p style="margin:16px 0 4px;font:13px ui-monospace,monospace;">B:照片(無 accept、⚠️ Android 測試用、iPhone 別測)</p>
+        <input type="file" id="photoTestInputB">
+        <pre id="photoTestDebugB" aria-label="診斷 B"></pre>
         <div class="photo-test-result" id="photoTestResult" hidden>
           <div class="photo-test-info" id="photoTestInfo"></div>
           <div class="photo-test-preview">
@@ -2092,12 +2100,15 @@
 
     /* a7 四輪:把所有診斷同步印到頁面(#photoTestDebug),聖瑱師手機沒 Console 也看得到。
        既有 console.log 保留不動(規則:不改舊行為),只是「同步也印到頁面」。 */
+    // a7 十二輪:診斷輸出可切換目標面板(input A → #photoTestDebug、input B → #photoTestDebugB)。
+    // 預設 null → 退回 A 的面板(共用壓縮鏈在 handler 外呼叫 dlog 時也不會掉)。
+    let activeDebugEl = null;
     function dlog(line) {
-      const el = document.getElementById("photoTestDebug");
+      const el = activeDebugEl || document.getElementById("photoTestDebug");
       if (el) el.textContent += line + "\n";
     }
     function dlogReset() {
-      const el = document.getElementById("photoTestDebug");
+      const el = activeDebugEl || document.getElementById("photoTestDebug");
       if (el) el.textContent = "";
     }
 
@@ -2443,10 +2454,13 @@
     /* E. 臨時測試 UI(Step 2b 拆掉):選照片 → 原圖 / 壓縮後並排 + 大小對比 + console */
     (function setupPhotoTest() {
       const input   = document.getElementById("photoTestInput");
+      const inputB  = document.getElementById("photoTestInputB"); // a7 十二輪:對照 input(無 accept)
       const result  = document.getElementById("photoTestResult");
       const info     = document.getElementById("photoTestInfo");
       const origImg  = document.getElementById("photoTestOriginal");
       const compImg  = document.getElementById("photoTestCompressed");
+      const panelA  = document.getElementById("photoTestDebug");
+      const panelB  = document.getElementById("photoTestDebugB");
       if (!input) return;
 
       let lastOrigUrl = null, lastCompUrl = null;
@@ -2455,13 +2469,10 @@
         if (lastCompUrl) { URL.revokeObjectURL(lastCompUrl); lastCompUrl = null; }
       }
 
-      input.addEventListener("change", async () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-
-        // a7 四輪:每次選新照片診斷面板先清空(規則 5)
-        dlogReset();
-
+      /* a7 十二輪:把 A 的處理流程抽成共用 function、A 與新增的對照 input B 都走同一條
+         (規則 2/3:不重複寫壓縮預覽鏈)。各 input 在自己的 change handler 設好
+         activeDebugEl + 印 [inputX] 標頭後再呼叫。A 的觀察行為不變(規則 9)。 */
+      async function processPhotoFile(file) {
         // a7 三輪:file 層級診斷(Samsung 雲端 stub 會 size=0、type 空 → 一眼看穿)
         console.log("[photo-test:file]", {
           name: file.name, type: file.type, size: file.size, lastModified: file.lastModified
@@ -2562,9 +2573,43 @@
           console.error("[photo-test] 壓縮失敗:", err);
           dlog("[error] " + (tag || "UNKNOWN") + " | msg=" + (err.message || ""));
         } finally {
-          input.value = ""; // 清掉、允許再次選同一張觸發 change
+          // input.value 由各自的 change handler 清(A / B 不同顆)
         }
+      }
+
+      // input A(既有、accept=image/*):行為不變(規則 9)、只是改呼叫共用 processPhotoFile
+      input.addEventListener("change", async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        activeDebugEl = panelA;
+        dlogReset();                               // a7 四輪:每次選新照片診斷面板先清空(規則 5)
+        dlog("=== [inputA] accept=image/* ===");
+        try { await processPhotoFile(file); }
+        finally { input.value = ""; }              // 清掉、允許再次選同一張觸發 change
       });
+
+      /* a7 十二輪:input B(對照、無 accept、Android 測試用)。
+         規則 4:無 accept 可能選到非圖片 → type 明確非 image/* 就擋下、不跑後續;
+         type 為空(Android content URI 有時不給 type)無法判斷、放行繼續測(面板會註記)。 */
+      if (inputB) {
+        inputB.addEventListener("change", async () => {
+          const file = inputB.files && inputB.files[0];
+          if (!file) return;
+          activeDebugEl = panelB;
+          dlogReset();
+          dlog("=== [inputB] 無 accept(Android 測試用、iPhone 別測)===");
+          if (file.type && !file.type.startsWith("image/")) {
+            dlog("[inputB] 非圖片檔 type=" + file.type + " → 擋下(規則 4)");
+            result.hidden = false;
+            info.textContent = "⚠ 請選照片、不要選文件或影片";
+            inputB.value = "";
+            return;
+          }
+          if (!file.type) dlog("[inputB] ⚠ type 為空、無法判斷格式、仍繼續測");
+          try { await processPhotoFile(file); }
+          finally { inputB.value = ""; }
+        });
+      }
 
       /* a7 十輪:FormData 直傳測試
          Samsung S21 Ultra 相機照前端任何「讀 bytes」方法都失敗。FormData 是讓
