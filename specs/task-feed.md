@@ -593,6 +593,20 @@ const MESSAGES = {
 
 ### Step 2b:發貼文 modal + 多張壓縮 + 上傳(Q-C 拍板:逐張 sequential)
 
+#### ⚑ Step 2a 實測定案的設計方向(2026-05-29、A/B 探針對照釘死後)
+
+> **Step 2a 結論**:照片失敗 root cause = Android 13+ Photo Picker 對雲端同步照片回 `content://media/picker` proxy URI、`file.arrayBuffer()` 秒 reject `NotReadableError`(非 code bug、非 accept 屬性、非網路)。照片在本機(截圖 / 現拍 / 我的檔案 / materialize 後)時全部正常。完整證據鏈見 `current-status.md` 決策記錄 2026-05-29。
+
+1. **input 保留 `accept="image/*"`**:家人最熟悉、UI 友善;Step 2a 證實拿掉 accept(對照 input B)無法穩定繞過 Photo Picker、accept 不是失敗變數、沒必要為它犧牲熟悉度。
+2. **主路徑 `compressFromImg`**(已驗證):從已顯示成功的原圖預覽 `<img>` 直接 drawImage、配 `loadRawImage` 四層 fallback 當後備。Step 2b 把它接進發貼文 modal、把臨時測試 UI(含 probe1/probe2 + 對照 input B)一起拆掉。
+3. **`NotReadableError` 偵測 → 友善退路文案**:讀取 / 壓縮鏈若拋 `NotReadableError`(或四層全失敗)→ 不靜默壞掉、跳：
+   > 「這張照片需要從雲端載入。請按 📷 重新拍一張、或在 Google 相簿打開後再回來選」
+   (規則 4 防呆 + 規則 7 真實工作流:長輩看得懂、給得出下一步動作。)
+4. **發貼文 modal 主推「📷 直接拍照」入口**:現拍 = 本機檔 = 必成功、繞開 proxy 風險。照片網格顯眼處放「📷 拍照」、「從相簿選」次之。
+5. **HEIF 偵測 → 同樣友善退路**:HEIF 是格式解碼限制(Chrome on Android 解不了、跟 proxy 是兩條獨立問題)、偵測到 origImg onerror / `.heic` 副檔名 → 跳「這張是 HEIC 格式、請改用 📷 拍一張」。
+
+> ⚠️ 這五點不取代既有 Q-C / D1 上傳邏輯(逐張 sequential + claimed-set 差集、見下)、只是把「照片來源可靠性」的對策補進 modal 設計。
+
 1. 寫發貼文 modal(照片網格 3x3、caption、可選配音)
 2. **逐張 sequential** 處理(`for await`、絕對不用 `Promise.all`、Q-C 拍板)
 3. 上傳完寫 Firestore posts + members.postCount + driveFolderId
@@ -801,4 +815,5 @@ const MESSAGES = {
 *Created: 2026-05-27 11:30(規劃對話框第一層 Recon 完成、10 題拍板)*
 *Updated: 2026-05-27 中午(接手對話框補充拍板 Q-A 到 Q-E、5 條落實進 spec)*
 *Updated: 2026-05-27 下午(Step 0 第二層 Recon 完成、6 條拍板落實:Q-D 嵌入+獨立配音器小工具、D1 claimed-set 差集、D5 Drive 命名拼音、navBtns[3] toast、D2 Apps Script ?action=list 兼容性三方案、6.x Step 0 真相校正)*
-*Status: Step 0 報告 + 拍板已落實 spec、等聖瑱師確認 Step 1 進場硬性檢查項(母資料夾 ID + Apps Script ?action=list 方案)後動工 Step 1*
+*Updated: 2026-05-29(Step 2a 過關、A/B 探針對照釘死 NotReadableError = Android Photo Picker proxy URI 硬限制、Step 2b 補入 5 點照片來源可靠性設計方向)*
+*Status: Step 1 已完成(見 current-status.md Task 5 Step 1)、Step 2a 已過關;Step 2b 設計方向定案、待動工*

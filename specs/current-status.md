@@ -1,6 +1,6 @@
 # Istanda Mapasnava — 目前進度
 
-> 最後更新：2026-05-28（Task 4 歸檔 + Task 5 Step 1 完成）
+> 最後更新：2026-05-29（Task 5 Step 2a 完成、A/B 探針對照釘死 NotReadableError root cause）
 > 每完成一個段落就更新這份檔案，讓下一個 Claude / Claude Code 一打開就知道現況。
 
 ---
@@ -119,11 +119,31 @@
 - [x] 範圍紀律:只動 `member.html` + 新增 `apps-script/` 記錄檔、index.html / script.js / posts / recordCount 邏輯零改動
 - [x] 連帶必要修補(已 flag):`loadRecordings` 解析吃新保底 schema(舊扁平相容)、`pickMimeFromFilename` 認 `.m4a`(audio/mp4 副檔名改 .m4a 後仍可播)、保底 list 過渡期多掃舊 `UPLOAD_FOLDER_ID`(清完試錄自然空)
 
+### Task 5 Step 2a：單張照片壓縮 + iOS/Android 照片讀取（2026-05-29 完成、最終版）
+- [x] 自寫 `readExifOrientation`(讀 0x0112 marker)+ `compressPhoto`(canvas 1080px / 80% JPEG)+ 臨時測試區
+- [x] **iPhone a1-a6 全 PASS**:直立/橫向照片壓縮後不橫躺(方向 α:信任瀏覽器依 EXIF 自動轉正、不手動旋轉、繞 iOS imageOrientation 雙重旋轉坑)
+- [x] 主路徑 `compressFromImg`:從已顯示成功的原圖預覽 `<img>` 直接 drawImage、配 `loadRawImage` 四層 fallback(decode → createImageBitmap → DOM-attached objectURL → FileReader)當後備、邏輯實測完全正確
+- [x] **Samsung S21 Ultra 照片在本機時全 PASS**:截圖、相機現拍、「我的檔案」入口、materialize 後的相簿照片皆成功
+- [x] **A/B 探針對照釘死 root cause**(commit `586fe92` 探針 / `712d657` A vs B input)：
+  - probe1 `file.slice(0,64KB).arrayBuffer` + probe2 `file.arrayBuffer` 比對 byteLength vs file.size
+  - 失敗時 probe2 秒 reject `NotReadableError`(18ms、非 stream 中斷)→ Chrome 從第 0 毫秒就拿不到 bytes、任何 JS 讀取技巧都救不了
+  - 先前九輪的 `compressFromImg「繞過 file→bytes」其實沒繞過(origImg 一樣要讀 content URI bytes 才能顯示)、所以時好時壞
+  - 近乎對照實驗:同一張 2827055 bytes 照片、走 Photo Picker proxy(數字檔名 `1000076786.jpg`)必敗、走真實檔(時間戳 `20260515_194608.jpg`)5/5 成功 → **成敗取決於照片當下是不是 proxy、不是 accept 屬性、不是照片本身、不是網路**
+  - input B(拿掉 accept)實測無法穩定繞過 Photo Picker → accept 不是變數;Android 13+ Photo Picker 給 proxy URI 是硬限制
+- [x] 上一輪「Google 相簿釋放空間」假設**已否決**(聖瑱師從沒按過釋放空間);真因是 Android Photo Picker proxy URI lifecycle
+- [x] 範圍紀律:只動 `member.html` 臨時測試區、Step 2b 會連測試 UI(含探針 + input B)一起拆
+- [x] **判決:Step 2a 過關**、進 Step 2b(設計方向見 task-feed.md Step 2b + 下方決策記錄 2026-05-29)
+
 ---
 
 ## 🔄 進行中
 
-- [ ] **Task 5 Step 2a:單張照片壓縮 + iOS EXIF 必驗**(自寫 `readExifOrientation` 讀 0x0112 marker ~30-50 行、canvas 1080px / 80% JPEG、**iPhone 直立照片壓縮後不橫躺為核心驗收**、整個 Task 5 最高風險點、過關才進 Step 2b)
+- [ ] **Task 5 Step 2b:發貼文 modal + 多張壓縮 + 上傳**(Step 2a 已過關)。根據 Step 2a 實測定案的設計方向(詳見 task-feed.md Step 2b)：
+  1. input 保留 `accept="image/*"`(家人最熟悉、UI 友善;Step 2a 證實 accept 不是失敗變數)
+  2. 主路徑 `compressFromImg`(已驗證)
+  3. **NotReadableError 偵測 → 友善退路文案**:「這張照片需要從雲端載入。請按 📷 重新拍一張、或在 Google 相簿打開後再回來選」
+  4. 發貼文 modal **主推「📷 直接拍照」入口**(現拍 = 本機 = 必成功、繞開 proxy 風險)
+  5. **HEIF 偵測 → 同樣友善退路**(format 不支援、請改拍)
 
 ---
 
@@ -237,6 +257,7 @@ recordings/{自動ID}/
 - ✅ **首頁 demo fallback `id: null` 潛在 bug**（2026-05-25 已修、Task 3 並行 hotfix）：`script.js:163-166` 加 `!m.id` 防呆、改 fallback 走 toast「家族資料還在連線、請重新整理頁面再試」、不再跳 `member.html?id=null`
 - **Task 1 Step 4 L1 暫停同筆從頭播**：點 ⏸ 暫停後再點 ▶ 同一筆會重新 fetch + 從頭播(不接續上次位置)。簡單實作、6/15 前可接受、之後可改進(暫存 audio.src 或 currentTime)
 - **Task 1 Step 4 L2 試聽 + 清單可同時發聲**:M1 拍板獨立 `playbackAudio` + `recordingsAudio`、罕見情境(剛錄完試聽中又滑去點過去錄音)會兩聲共存。獨立的代價、不修
+- 🟡 **Android Photo Picker proxy URI 偶發 NotReadableError**(Step 2a 釘死、2026-05-29):Android 13+ + Google 相簿同步下、Photo Picker(相簿入口)偶爾回 `content://media/picker` proxy URI、`file.size` 有值但 bytes 拉不到、`file.arrayBuffer()` 秒 reject NotReadableError。**這是 Android 平台硬限制、非 code bug**。Step 2b 對策:友善退路文案(改拍 / 相簿打開後再選)+ 主推「📷 直接拍照」入口。照片在本機(截圖 / 現拍 / 我的檔案 / materialize 後)時全部正常
 
 ---
 
@@ -328,6 +349,18 @@ recordings/{自動ID}/
 - **一個已知偏離**:`.share-sheet__*` CSS 放 member.html inline(跟 comment-sheet 慣例一致)、非 spec 字面的 style.css、功能無影響
 - **北極星第三題達成**:2026-05-26 14:17 訊息進家族 LINE 群組(「LINE 家族群組這週有沒有出現 App 連結?」= 有)
 - **下一步**:Task 5 首頁 Feed source 切到 recordings collection(Task 1-4 全超前、可提前到 6/2-6/8 動)
+
+### 2026-05-29:Task 5 Step 2a 完成、A/B 探針對照釘死 NotReadableError root cause
+- **背景**:Samsung S21 Ultra(Android 15 / Chrome 148)照片發貼文偶發失敗、iPhone 全成功;上一輪假設「Google 相簿釋放空間把照片移雲端」、但聖瑱師從沒按過釋放空間、假設存疑、從零重新診斷
+- **重新診斷**:從 change 第 0 毫秒插 bytes 層探針(probe1 `file.slice(0,64KB).arrayBuffer` / probe2 `file.arrayBuffer` 比對 byteLength vs file.size)、不解碼不建 objectURL、把「拿不到 bytes」vs「拿得到但解不了」一刀切開
+- **關鍵證據**:失敗時 probe2 秒 reject `NotReadableError`(18ms)→ 不是 stream 中斷、是 Chrome 連發起讀取都被擋。**先前九輪的 `compressFromImg「繞過 file→bytes」其實沒繞過**(origImg 一樣要讀 content URI bytes 才能顯示)、所以時好時壞
+- **近乎對照實驗**:同一張 2827055 bytes 照片、走 Photo Picker proxy(數字檔名 `1000076786.jpg`)必敗、走真實檔(時間戳 `20260515_194608.jpg`)5/5 成功 → 成敗取決於「照片當下是不是 proxy URI」
+- **input A vs B 對照**(commit `712d657`):B 拿掉 accept 仍無法穩定繞過 Photo Picker、**證實 accept 屬性不是失敗變數**;root cause = Android 13+ Photo Picker 對雲端同步照片回 proxy URI、bytes lazy 拉取在讀取當下失敗(NotReadableError)
+- **否決舊假設**:「釋放空間」假設錯誤;真因是 Android Photo Picker content URI lifecycle 硬限制、非 code bug、非聖瑱師操作
+- **判決**:Step 2a 過關(compressFromImg + 四層 fallback + iPhone a1-a6 + Samsung 本機照片全 PASS);proxy URI 列為已知限制
+- **Step 2b 設計方向(定案、寫入 task-feed.md)**:① input 保留 accept=image/* ② 主路徑 compressFromImg ③ NotReadableError 偵測 → 友善退路文案 ④ 發貼文 modal 主推「📷 直接拍照」入口(現拍=本機=必成功)⑤ HEIF 偵測 → 友善退路
+- **commits**:`586fe92`(probe)/ `712d657`(A/B input)
+- **下一步**:Step 2b 動工(發貼文 modal + 多張壓縮 + 上傳)
 
 ---
 
