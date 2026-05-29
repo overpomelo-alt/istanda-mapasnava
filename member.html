@@ -666,37 +666,193 @@
 
     [hidden] { display: none !important; }
 
-    /* ===== Step 2a 臨時測試區(Step 2b 拆掉、極簡)===== */
-    .photo-test-section {
-      margin: 24px 16px;
-      padding: 16px;
-      border: 1px dashed var(--border);
+    /* ===== Task 5 Step 2b-1:發貼文入口 + 全屏 Modal(手機優先、沿用 :root token)===== */
+    .post-entry {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 12px 16px 4px;
+    }
+    .post-entry__btn {
+      width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      height: 46px;
       border-radius: var(--radius-md);
+      font-size: 15px; font-weight: 600; font-family: var(--font-sans);
+      color: var(--text);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .post-entry__btn:hover { background: var(--bg-soft); }
+    .post-entry__btn:active { transform: scale(0.99); }
+
+    .post-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1250;
+      display: flex;
+      justify-content: center;
+    }
+    .post-modal__backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+    }
+    .post-modal__panel {
+      position: relative;
+      width: 100%;
+      max-width: var(--max-w);
+      height: 100%;
+      background: var(--bg-elevated);
+      display: flex;
+      flex-direction: column;
+      animation: post-modal-slide 0.22s ease-out;
+    }
+    @keyframes post-modal-slide {
+      from { transform: translateY(2%); opacity: 0.6; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+    .post-modal__header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .post-modal__cancel {
+      background: none; border: none;
+      color: var(--text-soft);
+      font-size: 15px; font-family: var(--font-sans);
+      cursor: pointer; padding: 6px 8px;
+    }
+    .post-modal__title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .post-modal__close {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: transparent; border: none;
+      color: var(--text); font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .post-modal__close:hover { background: var(--bg-soft); }
+    .post-modal__body {
+      flex: 1; overflow-y: auto;
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 18px;
+    }
+
+    /* 照片區 */
+    .post-photos__empty {
+      width: 100%;
+      min-height: 180px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 6px;
+      background: var(--bg-soft);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .post-photos__empty:hover { background: var(--border); }
+    .post-photos__empty-icon { font-size: 40px; color: var(--text-muted); line-height: 1; }
+    .post-photos__empty-text { font-size: 15px; font-weight: 600; color: var(--text-soft); }
+    .post-photos__empty-hint { font-size: 12px; color: var(--text-muted); }
+    .post-photos__strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+    /* 已選縮圖(2b-2 起 render、先放樣式)*/
+    .post-photo-thumb {
+      position: relative; flex-shrink: 0;
+      width: 84px; height: 84px;
+      border-radius: var(--radius-sm);
+      overflow: hidden; border: 1px solid var(--border);
+    }
+    .post-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .post-photo-thumb__del {
+      position: absolute; top: 3px; right: 3px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: rgba(0, 0, 0, 0.6); color: #fff;
+      border: none; font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* caption */
+    .post-caption__input {
+      width: 100%; box-sizing: border-box;
+      font-family: var(--font-sans);
+      font-size: 15px; color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      resize: none; outline: none;
+      line-height: 1.5; min-height: 76px;
+    }
+    .post-caption__input:focus { border-color: var(--text-muted); }
+    .post-caption__count {
+      text-align: right; font-size: 12px; color: var(--text-muted);
+      margin-top: 4px; font-variant-numeric: tabular-nums;
+    }
+    .post-caption__count--over { color: #dc2743; }
+
+    /* 配音 toggle */
+    .post-voice {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg-soft);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+    .post-voice__label { font-size: 14px; color: var(--text-soft); flex: 1; }
+    .post-voice__btn {
+      font-size: 14px; font-weight: 600;
+      color: var(--text); background: var(--bg-elevated);
+      border: 1px solid var(--border); border-radius: 18px;
+      padding: 6px 16px; cursor: pointer; font-family: var(--font-sans);
+      transition: transform 0.15s;
+    }
+    .post-voice__btn:active { transform: scale(0.96); }
+
+    /* footer:分享 */
+    .post-modal__footer {
+      flex-shrink: 0;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
       background: var(--bg-elevated);
     }
-    .photo-test-section h3 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
-    .photo-test-info {
-      font-size: 13px; line-height: 1.7; color: var(--text-soft);
-      white-space: pre-wrap; margin: 12px 0; font-variant-numeric: tabular-nums;
+    .post-modal__share {
+      width: 100%; height: 48px;
+      border-radius: var(--radius-md);
+      font-size: 16px; font-weight: 700; font-family: var(--font-sans);
+      color: #fff; background: #0095f6;  /* IG 藍 */
+      border: none; cursor: pointer;
+      transition: opacity 0.15s, transform 0.15s;
     }
-    .photo-test-preview { display: flex; gap: 12px; flex-wrap: wrap; }
-    .photo-test-preview > div { flex: 1; min-width: 140px; }
-    .photo-test-preview p { font-size: 12px; color: var(--text-muted); margin: 0 0 4px; }
-    .photo-test-preview img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; display: block; }
-    /* a7 四輪:頁面內診斷面板(聖瑱師手機螢幕直接看、不靠 Console)*/
-    #photoTestDebug, #photoTestDebugB {
-      margin: 12px 0 0;
-      padding: 8px 10px;
-      font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
-      background: #f4f1ea;
-      color: #1a1a1a;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      max-height: 300px;
-      overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-all;
+    .post-modal__share:active { transform: scale(0.99); }
+    .post-modal__share:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* 加照片 ActionSheet(bottom sheet、複用 comment-sheet-slide 上滑動畫)*/
+    .post-pick {
+      position: fixed; inset: 0; z-index: 1450;
+      display: flex; align-items: flex-end; justify-content: center;
     }
+    .post-pick__backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
+    .post-pick__panel {
+      position: relative; width: 100%; max-width: var(--max-w);
+      padding: 12px;
+      display: flex; flex-direction: column; gap: 8px;
+      animation: comment-sheet-slide 0.22s ease-out;
+    }
+    .post-pick__btn {
+      height: 52px; border-radius: var(--radius-md);
+      font-size: 16px; font-weight: 600; font-family: var(--font-sans);
+      color: var(--text); background: var(--bg-elevated);
+      border: 1px solid var(--border); cursor: pointer;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .post-pick__btn:active { transform: scale(0.98); }
+    .post-pick__btn:hover { background: var(--bg-soft); }
+    .post-pick__btn--cancel { color: var(--text-muted); font-weight: 700; }
   </style>
 </head>
 <body>
@@ -747,6 +903,11 @@
         <div class="record-hint" id="recordHint">點麥克風開始錄音</div>
       </section>
 
+      <!-- Task 5 Step 2b-1:發貼文入口(聖瑱師審 UI 後可決定最終位置:此處 vs bottom nav)-->
+      <div class="post-entry">
+        <button class="post-entry__btn" id="postEntryBtn" type="button">📷 發貼文</button>
+      </div>
+
       <!-- 試聽區（子步 3b:三按鈕橫排、預設 hidden、錄完才出現）-->
       <section class="playback-section" id="playbackSection" hidden>
         <audio id="playbackAudio" preload="auto"></audio>
@@ -764,37 +925,6 @@
         <audio id="recordingsAudio" preload="auto"></audio>
         <div id="recordingsList">
           <div class="recordings-empty">清單載入中…</div>
-        </div>
-      </section>
-
-      <!-- ⚠️ Step 2a 臨時照片壓縮測試區(Step 2b 拆掉)-->
-      <section class="photo-test-section" id="photoTestSection">
-        <h3>📷 照片壓縮測試(Step 2a 暫用、Step 2b 拆)</h3>
-        <!-- input A(既有、accept=image/*):iPhone 與 Android 都測 -->
-        <p style="margin:8px 0 4px;font:13px ui-monospace,monospace;">A:照片(現行 accept=image/*)</p>
-        <input type="file" accept="image/*" id="photoTestInput">
-        <!-- a7 十輪:FormData 直傳測試(純驗證、不存 Drive、不壓縮)-->
-        <button type="button" id="formdataTestBtn" style="margin-top:8px;padding:8px 12px;border:1px solid #1a1a1a;background:#fff;border-radius:6px;font:13px ui-monospace,monospace;cursor:pointer;">測試 FormData 直傳</button>
-        <!-- a7 四輪:頁面內診斷面板(無 Console 環境也看得到完整路徑) -->
-        <pre id="photoTestDebug" aria-label="診斷 A"></pre>
-
-        <!-- a7 十二輪:input B(對照、拿掉 accept、看 Android picker 預設是否改走「我的檔案」)。
-             ⚠️ Android 測試專用、iPhone 行為未知、聖瑱師 iPhone 暫不要測這顆。 -->
-        <p style="margin:16px 0 4px;font:13px ui-monospace,monospace;">B:照片(無 accept、⚠️ Android 測試用、iPhone 別測)</p>
-        <input type="file" id="photoTestInputB">
-        <pre id="photoTestDebugB" aria-label="診斷 B"></pre>
-        <div class="photo-test-result" id="photoTestResult" hidden>
-          <div class="photo-test-info" id="photoTestInfo"></div>
-          <div class="photo-test-preview">
-            <div>
-              <p>原圖</p>
-              <img id="photoTestOriginal" alt="原圖預覽">
-            </div>
-            <div>
-              <p>壓縮後</p>
-              <img id="photoTestCompressed" alt="壓縮後預覽">
-            </div>
-          </div>
         </div>
       </section>
 
@@ -878,6 +1008,60 @@
       <button class="share-sheet__btn share-sheet__btn--line"   id="shareOpenLine"></button>
       <button class="share-sheet__btn share-sheet__btn--copy"   id="shareCopy"></button>
       <button class="share-sheet__btn share-sheet__btn--cancel" id="shareCancel"></button>
+    </div>
+  </div>
+
+  <!-- ============ Task 5 Step 2b-1:發貼文 Modal(全屏、純 UI 殼)============
+       ⚠️ 這一子步只做 UI。拍照 / 選照片 / 配音 / 分享 按鈕點了只 console.log、
+       不接上傳 / 壓縮 / 錄音 / Firestore 邏輯(見 task-feed.md Step 2b)。 -->
+  <div id="postModal" class="post-modal" hidden>
+    <div class="post-modal__backdrop" id="postModalBackdrop"></div>
+    <div class="post-modal__panel">
+      <div class="post-modal__header">
+        <button class="post-modal__cancel" id="postModalCancel" type="button">取消</button>
+        <div class="post-modal__title">發貼文</div>
+        <button class="post-modal__close" id="postModalClose" type="button" aria-label="關閉">✕</button>
+      </div>
+
+      <div class="post-modal__body">
+        <!-- 1. 照片區(初始空、最多 9 張)-->
+        <div class="post-photos">
+          <button class="post-photos__empty" id="postAddPhotoEmpty" type="button">
+            <span class="post-photos__empty-icon">＋</span>
+            <span class="post-photos__empty-text">加照片</span>
+            <span class="post-photos__empty-hint">最多 9 張</span>
+          </button>
+          <!-- 已選預覽列:2b-2 起 render 縮圖(每張右上 [×])、滿 9 張隱藏加照片入口 -->
+          <div class="post-photos__strip" id="postPhotosStrip" hidden></div>
+        </div>
+
+        <!-- 2. caption -->
+        <div class="post-caption">
+          <textarea id="postCaption" class="post-caption__input" placeholder="寫點什麼…" rows="3" maxlength="500"></textarea>
+          <div class="post-caption__count" id="postCaptionCount" hidden>0 / 500</div>
+        </div>
+
+        <!-- 3. 配音 toggle(純佔位、Step 2b-4 接 createRecorder 小工具、獨立 voiceRecorder 變數)-->
+        <div class="post-voice">
+          <span class="post-voice__label">🎤 配音(選填)</span>
+          <button class="post-voice__btn" id="postVoiceBtn" type="button">錄音</button>
+        </div>
+      </div>
+
+      <!-- 4. 底部固定:分享(初始 disabled、沒照片不能分享)-->
+      <div class="post-modal__footer">
+        <button class="post-modal__share" id="postShareBtn" type="button" disabled>分享</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加照片 ActionSheet(二選一、純 UI、Step 2b-2 接拍照 / 2b-3 接相簿)-->
+  <div id="postPickSheet" class="post-pick" hidden>
+    <div class="post-pick__backdrop" id="postPickBackdrop"></div>
+    <div class="post-pick__panel">
+      <button class="post-pick__btn" id="postPickCamera" type="button">📷 拍照</button>
+      <button class="post-pick__btn" id="postPickGallery" type="button">🖼️ 從相簿選</button>
+      <button class="post-pick__btn post-pick__btn--cancel" id="postPickCancel" type="button">取消</button>
     </div>
   </div>
 
@@ -2098,19 +2282,10 @@
     const PHOTO_JPEG_QUALITY = 0.8;       // 輸出 JPEG 品質
     const PHOTO_MAX_BYTES = 5 * 1024 * 1024; // 單張壓縮後上限(spec:超過丟錯、上層提示換一張)
 
-    /* a7 四輪:把所有診斷同步印到頁面(#photoTestDebug),聖瑱師手機沒 Console 也看得到。
-       既有 console.log 保留不動(規則:不改舊行為),只是「同步也印到頁面」。 */
-    // a7 十二輪:診斷輸出可切換目標面板(input A → #photoTestDebug、input B → #photoTestDebugB)。
-    // 預設 null → 退回 A 的面板(共用壓縮鏈在 handler 外呼叫 dlog 時也不會掉)。
-    let activeDebugEl = null;
-    function dlog(line) {
-      const el = activeDebugEl || document.getElementById("photoTestDebug");
-      if (el) el.textContent += line + "\n";
-    }
-    function dlogReset() {
-      const el = activeDebugEl || document.getElementById("photoTestDebug");
-      if (el) el.textContent = "";
-    }
+    // Step 2b-1:Step 2a 頁內測試面板已拆。dlog 保留走 console(壓縮鏈 compressFromImg /
+    // compressPhoto / loadRawImage 仍呼叫、2b-2 接發貼文 modal 時直接複用)。dlogReset / activeDebugEl
+    // 0 呼叫端、已清(規則 1 補充:0 讀取的死代碼直接清)。
+    function dlog(line) { console.log("[photo]", line); }
 
     /* 自寫 minimal EXIF orientation reader
        只在 JPEG 檔頭找 APP1(FFE1)→ "Exif\0\0" → TIFF → IFD0 → tag 0x0112。
@@ -2451,221 +2626,92 @@
       };
     }
 
-    /* E. 臨時測試 UI(Step 2b 拆掉):選照片 → 原圖 / 壓縮後並排 + 大小對比 + console */
-    (function setupPhotoTest() {
-      const input   = document.getElementById("photoTestInput");
-      const inputB  = document.getElementById("photoTestInputB"); // a7 十二輪:對照 input(無 accept)
-      const result  = document.getElementById("photoTestResult");
-      const info     = document.getElementById("photoTestInfo");
-      const origImg  = document.getElementById("photoTestOriginal");
-      const compImg  = document.getElementById("photoTestCompressed");
-      const panelA  = document.getElementById("photoTestDebug");
-      const panelB  = document.getElementById("photoTestDebugB");
-      if (!input) return;
+    /* ============================================================
+       Task 5 Step 2b-1:發貼文 Modal(純 UI 殼)
+       ⚠️ 這一子步只做 UI。拍照 / 選照片 / 配音 / 分享 按鈕點了只 console.log、
+       不接任何上傳 / 壓縮 / 錄音 / Firestore 邏輯。
+       compressFromImg / compressPhoto / loadRawImage 四層鏈已保留為上方內部函式、
+       2b-2 接「拍照 → compressFromImg + arrayBuffer 守門 + NotReadableError 友善退路」時直接複用。
+       ============================================================ */
+    (function setupPostModal() {
+      const entryBtn   = document.getElementById("postEntryBtn");
+      const modal      = document.getElementById("postModal");
+      if (!entryBtn || !modal) return;
 
-      let lastOrigUrl = null, lastCompUrl = null;
-      function clearPreviousUrls() { // 規則 5:換新前先釋放舊 objectURL、避免洩漏 / ghost
-        if (lastOrigUrl) { URL.revokeObjectURL(lastOrigUrl); lastOrigUrl = null; }
-        if (lastCompUrl) { URL.revokeObjectURL(lastCompUrl); lastCompUrl = null; }
+      const backdrop   = document.getElementById("postModalBackdrop");
+      const cancelBtn  = document.getElementById("postModalCancel");
+      const closeBtn   = document.getElementById("postModalClose");
+      const addEmpty   = document.getElementById("postAddPhotoEmpty");
+      const caption    = document.getElementById("postCaption");
+      const captionCnt = document.getElementById("postCaptionCount");
+      const voiceBtn   = document.getElementById("postVoiceBtn");
+      const shareBtn   = document.getElementById("postShareBtn");
+
+      const pickSheet  = document.getElementById("postPickSheet");
+      const pickBack   = document.getElementById("postPickBackdrop");
+      const pickCam    = document.getElementById("postPickCamera");
+      const pickGal    = document.getElementById("postPickGallery");
+      const pickCancel = document.getElementById("postPickCancel");
+
+      const CAPTION_MAX = 500;
+
+      function openPostModal() {
+        modal.hidden = false;
+        document.body.style.overflow = "hidden";   // 鎖背景捲動(規則 5:離開時還原)
       }
-
-      /* a7 十二輪:把 A 的處理流程抽成共用 function、A 與新增的對照 input B 都走同一條
-         (規則 2/3:不重複寫壓縮預覽鏈)。各 input 在自己的 change handler 設好
-         activeDebugEl + 印 [inputX] 標頭後再呼叫。A 的觀察行為不變(規則 9)。 */
-      async function processPhotoFile(file) {
-        // a7 三輪:file 層級診斷(Samsung 雲端 stub 會 size=0、type 空 → 一眼看穿)
-        console.log("[photo-test:file]", {
-          name: file.name, type: file.type, size: file.size, lastModified: file.lastModified
-        });
-        dlog("[file] name=" + file.name + " type=" + file.type +
-             " size=" + file.size + " lastModified=" + file.lastModified);
-
-        /* a7 十一輪:bytes 層探針(插在最前面、不解碼、不建 objectURL、不畫 canvas)
-           目的:把「拿不到 bytes」vs「拿得到但解不了」一刀切開。
-           - 探針 1:讀前 64KB → content provider 給不給 bytes?
-           - 探針 2:讀整檔 → byteLength 對不對得上 file.size?(metadata vs 實際 bytes)
-           判讀:探針 2 失敗 or byteLength≠size = bytes 層問題(雲端/picker 路由);
-                探針 2 成功且一致但圖仍壓不出 = 解碼/格式層問題(HEIF 之類)。
-           純診斷、不影響後面 compressFromImg + 四層鏈。Step 2b 連同測試區一起拆。*/
-        const PROBE_HEAD_BYTES = 65536; // 64KB、只測「拿不拿得到開頭 bytes」
-        const pt1 = performance.now();
-        try {
-          const head = await file.slice(0, PROBE_HEAD_BYTES).arrayBuffer();
-          dlog("[probe1] slice(0,64KB).arrayBuffer OK 拿到=" + head.byteLength +
-               "B " + Math.round(performance.now() - pt1) + "ms");
-        } catch (e) {
-          dlog("[probe1] slice FAIL " + (e && e.name ? e.name : "?") +
-               " | " + (e && e.message ? e.message : e) +
-               " " + Math.round(performance.now() - pt1) + "ms");
-        }
-        const pt2 = performance.now();
-        try {
-          const all = await file.arrayBuffer();
-          const match = all.byteLength === file.size ? "✅一致" : "❌不一致";
-          dlog("[probe2] arrayBuffer OK 拿到=" + all.byteLength +
-               "B vs size=" + file.size + " " + match +
-               " " + Math.round(performance.now() - pt2) + "ms");
-        } catch (e) {
-          dlog("[probe2] arrayBuffer FAIL " + (e && e.name ? e.name : "?") +
-               " | " + (e && e.message ? e.message : e) +
-               " " + Math.round(performance.now() - pt2) + "ms");
-        }
-
-        clearPreviousUrls();
-        result.hidden = false;
-        info.textContent = "處理中…";
-        compImg.removeAttribute("src");
-
-        // 原圖預覽(瀏覽器自動依 EXIF 顯示;a7 九輪:這個顯示成功的 img 同時作為壓縮來源)
-        lastOrigUrl = URL.createObjectURL(file);
-        origImg.src = lastOrigUrl;
-
-        const t0 = performance.now();
-        try {
-          // a7 九輪:優先走「從已顯示 origImg drawImage」這條新路、舊四層當後備
-          let r;
-          try {
-            await waitDisplayImgReady(origImg);
-            dlog("[displayImg] origImg onload OK w=" + origImg.naturalWidth + " h=" + origImg.naturalHeight);
-            dlog("[displayImg] drawImage from displayed img...");
-            r = await compressFromImg(origImg);
-          } catch (displayErr) {
-            dlog("[displayImg] origImg 載入失敗 " + (displayErr && displayErr.message ? displayErr.message : displayErr));
-            dlog("[displayImg] 回退到 compressPhoto(file) 四層鏈");
-            r = await compressPhoto(file);
-          }
-          const ms = Math.round(performance.now() - t0);
-          lastCompUrl = URL.createObjectURL(r.blob);
-          compImg.src = lastCompUrl;
-
-          const kb = n => (n / 1024).toFixed(1) + " KB";
-          const pct = r.originalSize ? Math.round((1 - r.compressedSize / r.originalSize) * 100) : 0;
-          info.textContent =
-            `檔名:${file.name}\n` +
-            `orientation:${r.orientation}\n` +
-            `原尺寸:${r.originalWidth}×${r.originalHeight}  (${kb(r.originalSize)})\n` +
-            `壓縮後:${r.width}×${r.height}  (${kb(r.compressedSize)})\n` +
-            `縮減:${pct}%   耗時:${ms} ms`;
-
-          console.log("[photo-test]", {
-            name: file.name, orientation: r.orientation,
-            originalSize: r.originalSize, compressedSize: r.compressedSize,
-            originalDim: `${r.originalWidth}x${r.originalHeight}`,
-            compressedDim: `${r.width}x${r.height}`, reducedPct: pct, ms
-          });
-          dlog("[result] 成功 壓縮後 " + r.width + "x" + r.height);
-        } catch (err) {
-          // a7 修:loadRawImage 三層 fallback 帶 ERROR_TYPE tag、UI 顯示 type、Console 印詳細 stack
-          // a7 三輪:EMPTY_FILE / FR_EMPTY_RESULT = Samsung 雲端 stub 症狀(size=0 / dataURL 空)
-          const KNOWN_TAGS = ["DECODE_FAILED", "BITMAP_FAILED", "IMAGE_LOAD_FAILED", "FILEREADER_FAILED", "FR_EMPTY_RESULT"];
-          const tag = (err.message || "").split(":")[0];
-          const CLOUD_STUB_MSG = "這張照片可能存在雲端、請先在相簿下載到手機、或改用相機拍攝";
-          let msg;
-          if      (err.message === "HEIC_NOT_SUPPORTED") msg = "這張是 HEIC 格式、請換一張 JPG 照片";
-          else if (err.message === "PHOTO_TOO_LARGE")    msg = "照片太大、請換一張";
-          else if (err.message === "CANVAS_TOBLOB_NULL") msg = "這張照片無法處理、請換一張";
-          else if (tag === "EMPTY_FILE")                 msg = CLOUD_STUB_MSG;
-          else if (tag === "FR_EMPTY_RESULT")            msg = CLOUD_STUB_MSG; // dataURL 空 = 同症狀
-          else if (KNOWN_TAGS.includes(tag))             msg = "壓縮失敗:" + tag;
-          else                                            msg = "壓縮失敗:" + err.message;
-          info.textContent = "⚠ " + msg;
-          compImg.removeAttribute("src");
-          console.error("[photo-test] 壓縮失敗:", err);
-          dlog("[error] " + (tag || "UNKNOWN") + " | msg=" + (err.message || ""));
-        } finally {
-          // input.value 由各自的 change handler 清(A / B 不同顆)
-        }
+      function closePostModal() {
+        modal.hidden = true;
+        closePickSheet();
+        document.body.style.overflow = "";
       }
+      function openPickSheet()  { pickSheet.hidden = false; }
+      function closePickSheet() { if (pickSheet) pickSheet.hidden = true; }
 
-      // input A(既有、accept=image/*):行為不變(規則 9)、只是改呼叫共用 processPhotoFile
-      input.addEventListener("change", async () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-        activeDebugEl = panelA;
-        dlogReset();                               // a7 四輪:每次選新照片診斷面板先清空(規則 5)
-        dlog("=== [inputA] accept=image/* ===");
-        try { await processPhotoFile(file); }
-        finally { input.value = ""; }              // 清掉、允許再次選同一張觸發 change
+      // 入口
+      entryBtn.addEventListener("click", openPostModal);
+
+      // 關閉:取消 / ✕ / 遮罩 / Esc(Esc 先關 ActionSheet、再關 modal)
+      cancelBtn.addEventListener("click", closePostModal);
+      closeBtn.addEventListener("click", closePostModal);
+      backdrop.addEventListener("click", closePostModal);
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        if (!pickSheet.hidden) { closePickSheet(); return; }
+        if (!modal.hidden) closePostModal();
       });
 
-      /* a7 十二輪:input B(對照、無 accept、Android 測試用)。
-         規則 4:無 accept 可能選到非圖片 → type 明確非 image/* 就擋下、不跑後續;
-         type 為空(Android content URI 有時不給 type)無法判斷、放行繼續測(面板會註記)。 */
-      if (inputB) {
-        inputB.addEventListener("change", async () => {
-          const file = inputB.files && inputB.files[0];
-          if (!file) return;
-          activeDebugEl = panelB;
-          dlogReset();
-          dlog("=== [inputB] 無 accept(Android 測試用、iPhone 別測)===");
-          if (file.type && !file.type.startsWith("image/")) {
-            dlog("[inputB] 非圖片檔 type=" + file.type + " → 擋下(規則 4)");
-            result.hidden = false;
-            info.textContent = "⚠ 請選照片、不要選文件或影片";
-            inputB.value = "";
-            return;
-          }
-          if (!file.type) dlog("[inputB] ⚠ type 為空、無法判斷格式、仍繼續測");
-          try { await processPhotoFile(file); }
-          finally { inputB.value = ""; }
-        });
-      }
+      // 加照片 → ActionSheet 二選一(2b-1 純 UI、只 console.log)
+      addEmpty.addEventListener("click", openPickSheet);
+      pickBack.addEventListener("click", closePickSheet);
+      pickCancel.addEventListener("click", closePickSheet);
+      pickCam.addEventListener("click", () => {
+        console.log("[2b-1] 拍照入口 clicked"); // Step 2b-2 接 <input capture="environment"> + compressFromImg
+        closePickSheet();
+      });
+      pickGal.addEventListener("click", () => {
+        console.log("[2b-1] 從相簿選 入口 clicked"); // Step 2b-3 接 accept="image/*" multiple
+        closePickSheet();
+      });
 
-      /* a7 十輪:FormData 直傳測試
-         Samsung S21 Ultra 相機照前端任何「讀 bytes」方法都失敗。FormData 是讓
-         瀏覽器內部把 file 塞進 multipart request body、JS 不用讀 bytes。
-         測這條能不能繞過去。⚠️ 點之前要先選好那張讀不到的照片(input 上)。 */
-      const formdataTestBtn = document.getElementById("formdataTestBtn");
-      if (formdataTestBtn) {
-        formdataTestBtn.addEventListener("click", async () => {
-          const file = input.files && input.files[0];
-          if (!file) {
-            dlog("[formdata] 請先在上方選一張照片再按這顆");
-            return;
-          }
-          dlog("[formdata] file: name=" + file.name + " size=" + file.size + " type=" + file.type);
+      // caption:字數計數 + 自動展開高度(maxlength=500 已硬限、計數提示用)
+      caption.addEventListener("input", () => {
+        const len = caption.value.length;
+        captionCnt.hidden = len === 0;
+        captionCnt.textContent = len + " / " + CAPTION_MAX;
+        captionCnt.classList.toggle("post-caption__count--over", len >= CAPTION_MAX);
+        caption.style.height = "auto";
+        caption.style.height = Math.min(caption.scrollHeight, 200) + "px";
+      });
 
-          const fd = new FormData();
-          fd.append("photo", file, file.name);
-          // ⚠️ 絕對不要自己設 Content-Type、要讓瀏覽器自動帶 multipart boundary
+      // 配音(純佔位、Step 2b-4 接 createRecorder 小工具、獨立 voiceRecorder 變數、不共用頁面錄音器)
+      voiceBtn.addEventListener("click", () => {
+        console.log("[2b-1] 配音 錄音 clicked");
+      });
 
-          dlog("[formdata] POST 送出中...(blind、跨域 redirect 不解析 response)");
-          try {
-            await fetch(APPS_SCRIPT_URL, { method: "POST", body: fd });
-            dlog("[formdata] POST 送出完成");
-          } catch (e) {
-            dlog("[formdata] POST throw: " + (e && e.message ? e.message : e));
-            return;
-          }
-
-          // 等 1 秒、給 Apps Script 寫完 PropertiesService
-          await new Promise(r => setTimeout(r, 1000));
-          dlog("[formdata] GET ?action=lastFormDataSize 撈後端記錄...");
-          try {
-            const resp = await fetch(APPS_SCRIPT_URL + "?action=lastFormDataSize&_=" + Date.now());
-            const data = await resp.json();
-            const backendSize = parseInt(data.size || "0", 10);
-            dlog("[formdata] 後端 body size=" + backendSize + " (含 multipart 開銷、預期 ≈ file.size + 數百 bytes)");
-            dlog("[formdata] 後端 type=" + (data.type || ""));
-            if (data.debug) dlog("[formdata] e debug=" + data.debug);
-            if (backendSize === 0) {
-              dlog("[formdata] ❌ 後端收到 0 bytes、FormData 也死");
-            } else {
-              const diff = backendSize - file.size;
-              // 開銷一般 100-1000 bytes、保險抓 5KB 內視為「完整收到」
-              if (diff >= 0 && diff < 5000) {
-                dlog("[formdata] ✅ FormData 完整收到(body 比 file 大 " + diff + " bytes、合理的 multipart 開銷)");
-              } else if (diff < 0) {
-                dlog("[formdata] ⚠ 後端 body 小於 file.size(差 " + diff + " bytes)、不對勁");
-              } else {
-                dlog("[formdata] ⚠ 後端 body 比 file 大 " + diff + " bytes、超出預期開銷、可能多 part 或編碼問題");
-              }
-            }
-          } catch (e) {
-            dlog("[formdata] GET 撈後端 size 失敗: " + (e && e.message ? e.message : e));
-          }
-        });
-      }
+      // 分享(初始 disabled、沒照片不能分享;handler 預留、2b-4 接上傳 + Firestore)
+      shareBtn.addEventListener("click", () => {
+        console.log("[2b-1] 分享 clicked");
+      });
     })();
 
     main();
