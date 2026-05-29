@@ -775,6 +775,12 @@
       border: none; font-size: 13px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
     }
+    /* 末尾「＋ 加更多」tile(<9 張時顯示)*/
+    .post-photo-thumb--add {
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-soft); border: 2px dashed var(--border);
+      color: var(--text-muted); font-size: 28px; cursor: pointer;
+    }
 
     /* caption */
     .post-caption__input {
@@ -1023,8 +1029,10 @@
           </button>
           <!-- 已選預覽列:2b-2 起 render 縮圖(每張右上 [×])、滿 9 張隱藏加照片入口 -->
           <div class="post-photos__strip" id="postPhotosStrip" hidden></div>
-          <!-- 拍照用 hidden input(capture=現拍、永遠本機、不踩 proxy)。2b-3 另加相簿 multiple input -->
+          <!-- 拍照用 hidden input(capture=現拍、永遠本機、不踩 proxy)-->
           <input type="file" accept="image/*" capture="environment" id="postCameraInput" hidden>
+          <!-- 相簿用 hidden input(multiple、可能踩 Android Photo Picker proxy、每張過守門)-->
+          <input type="file" accept="image/*" multiple id="postGalleryInput" hidden>
         </div>
 
         <!-- 2. caption -->
@@ -2631,11 +2639,12 @@
     }
 
     /* ============================================================
-       Task 5 Step 2b-2:發貼文 Modal — 拍照入口 + 守門 + HEIF 轉檔 + compressFromImg 主路徑
-       ⚠️ 範圍:只接「📷 拍照」(現拍永遠本機、不踩 proxy)、只接 1 張。
-       「🖼️ 從相簿選」留 2b-3、真上傳/Firestore 留 2b-4、分享鈕仍只 console.log。
+       Task 5 Step 2b-3:發貼文 Modal — 拍照(單張)+ 從相簿選(多張 1-9)+ sequential 壓縮 + 預覽列
+       ⚠️ 範圍:接「📷 拍照」+「🖼️ 從相簿選」(multiple、sequential、失敗隔離)。
+       真上傳/Firestore 留 2b-4(分享鈕仍只 console.log)。
        既有 compressFromImg / compressPhoto / loadRawImage 四層 / waitDisplayImgReady /
-       readExifOrientation 一字未動(規則 9)、這裡用新 helper compressViaDisplayedImg 呼叫它們。
+       readExifOrientation 一字未動(規則 9)、用 helper compressViaDisplayedImg 呼叫它們。
+       單張 / 多張共用核心 buildPhotoEntry(規則 2:不重寫流程)。
        ============================================================ */
     (function setupPostModal() {
       const entryBtn   = document.getElementById("postEntryBtn");
@@ -2648,6 +2657,7 @@
       const addEmpty   = document.getElementById("postAddPhotoEmpty");
       const strip      = document.getElementById("postPhotosStrip");
       const camInput   = document.getElementById("postCameraInput");
+      const galInput   = document.getElementById("postGalleryInput");
       const caption    = document.getElementById("postCaption");
       const captionCnt = document.getElementById("postCaptionCount");
       const shareBtn   = document.getElementById("postShareBtn");
@@ -2664,8 +2674,8 @@
       const cloudCancel = document.getElementById("postCloudCancel");
 
       const CAPTION_MAX = 500;
+      const POST_MAX_PHOTOS = 9;   // 一篇貼文照片上限(規則 1:給名字、之後改一處)
       // 已選照片暫存:每筆 { original:File(原始), compressed:Blob(壓縮後、2b-4 上傳用), previewUrl:string(縮圖) }。
-      // 2b-2 只 push 1 筆;2b-3 多張沿用同結構。
       const postPhotos = [];
 
       /* ---- 開關 ---- */
@@ -2695,7 +2705,7 @@
           addEmpty.hidden = false;
           strip.hidden = true;
         } else {
-          addEmpty.hidden = true;   // 2b-2 只接 1 張;2b-3 改成 <9 張時顯示「加更多」tile
+          addEmpty.hidden = true;   // 有照片:大空狀態收起、改用預覽列(<9 張時末尾補「加更多」tile)
           strip.hidden = false;
           postPhotos.forEach((p, idx) => {
             const thumb = document.createElement("div");
@@ -2713,6 +2723,16 @@
             thumb.appendChild(del);
             strip.appendChild(thumb);
           });
+          // <9 張 → 末尾「＋ 加更多」tile;=9 張 → 不顯示(等於選照片入口 disabled)
+          if (postPhotos.length < POST_MAX_PHOTOS) {
+            const more = document.createElement("button");
+            more.type = "button";
+            more.className = "post-photo-thumb post-photo-thumb--add";
+            more.setAttribute("aria-label", "加更多照片");
+            more.textContent = "＋";
+            more.addEventListener("click", openPickSheet);   // 重開 ActionSheet
+            strip.appendChild(more);
+          }
         }
         shareBtn.disabled = postPhotos.length === 0;   // 有照片才能分享
       }
@@ -2728,7 +2748,7 @@
         renderPostPhotos();
       }
 
-      /* ---- 拍照 ---- */
+      /* ---- 拍照(單張)---- */
       function triggerCamera() {
         closeCloudFallback();
         closePickSheet();
@@ -2739,7 +2759,20 @@
         const file = camInput.files && camInput.files[0];
         camInput.value = "";   // 立刻清、避免殘留
         if (!file) return;
-        await handlePickedFile(file);
+        await handleCameraFile(file);
+      });
+
+      /* ---- 從相簿選(多張、可能踩 Android Photo Picker proxy)---- */
+      function triggerGallery() {
+        closePickSheet();
+        galInput.value = "";   // 清舊值、允許重選同一批也觸發 change
+        galInput.click();
+      }
+      galInput.addEventListener("change", async () => {
+        const files = galInput.files ? Array.from(galInput.files) : [];
+        galInput.value = "";   // 立刻清、避免殘留
+        if (files.length === 0) return;
+        await handleGalleryFiles(files);
       });
 
       // HEIF 判斷(type 或副檔名)
@@ -2771,7 +2804,7 @@
             await waitDisplayImgReady(img);
             return await compressFromImg(img);
           } catch (displayErr) {
-            console.warn("[2b-2] 主路徑 compressFromImg 失敗、退四層鏈:", displayErr && displayErr.message);
+            console.warn("[photo] 主路徑 compressFromImg 失敗、退四層鏈:", displayErr && displayErr.message);
             return await compressPhoto(file);
           }
         } finally {
@@ -2780,38 +2813,77 @@
         }
       }
 
-      /* 收到拍照 File → (a)守門 →(b)HEIF 轉檔 →(c)主路徑壓縮 →(d)預覽暫存。 */
-      async function handlePickedFile(file) {
-        if (!file) return;
-        // a. arrayBuffer 守門(規則 4:NotReadableError 不能漏網;proxy URI 在此攔下)
+      /* 單張處理核心(守門 → HEIF → 主路徑壓縮)。回傳結果物件、不直接碰 UI,
+         讓單張(拍照)與多張(相簿)共用、各自決定怎麼提示(規則 2:不重寫流程)。
+         回傳:{ status:"ok", photo } | { status:"cloud" }(NotReadableError)| { status:"error", reason } */
+      async function buildPhotoEntry(file) {
+        // a. arrayBuffer 守門(規則 4:NotReadableError 不漏網;Android proxy URI 在此攔下)
         try {
           await file.arrayBuffer();
         } catch (err) {
-          if (err && err.name === "NotReadableError") { showCloudPhotoFallback(); return; }
-          throw err;                               // 其他錯誤往上拋
+          if (err && err.name === "NotReadableError") return { status: "cloud" };
+          return { status: "error", reason: (err && err.message) || "讀取失敗" };
         }
         // b. HEIF → JPEG
         let working;
         try {
           working = await maybeConvertHeic(file);
         } catch (e) {
-          console.warn("[2b-2] HEIF 轉檔失敗:", e && e.message ? e.message : e);
-          showToast("這張照片格式不支援、請用相機重拍", 3200);
-          return;
+          console.warn("[2b-3] HEIF 轉檔失敗:", e && e.message ? e.message : e);
+          return { status: "error", reason: "HEIF 轉檔失敗" };
         }
         // c. compressFromImg 主路徑(既有四層鏈當後備、都不動)
         let result;
         try {
           result = await compressViaDisplayedImg(working);
         } catch (e) {
-          console.error("[2b-2] 壓縮失敗:", e && e.message ? e.message : e);
-          showToast("這張照片無法處理、請換一張或重拍", 3200);
+          console.error("[2b-3] 壓縮失敗:", e && e.message ? e.message : e);
+          return { status: "error", reason: (e && e.message) || "壓縮失敗" };
+        }
+        // d. 成功:組 entry(previewUrl = 壓縮後 Blob 的 objectURL)
+        const previewUrl = URL.createObjectURL(result.blob);
+        return { status: "ok", photo: { original: file, compressed: result.blob, previewUrl } };
+      }
+
+      /* 拍照單張:沿用 2b-2 行為(雲端→退路、錯誤→toast、成功→push)。 */
+      async function handleCameraFile(file) {
+        if (!file) return;
+        const res = await buildPhotoEntry(file);
+        if (res.status === "cloud") { showCloudPhotoFallback(); return; }
+        if (res.status === "error") { showToast("這張照片無法處理、請換一張或重拍", 3200); return; }
+        postPhotos.push(res.photo);
+        renderPostPhotos();
+      }
+
+      /* 相簿多張:sequential(for await、非 Promise.all、防記憶體爆)+ 失敗隔離(規則 4):
+         某張任一步失敗 → 跳過那張、不留半成品、不中斷整批;跑完一次性彙整提示。
+         超過剩餘空位只取前面幾張(連同已選的合計不超過 9)。 */
+      async function handleGalleryFiles(files) {
+        const remaining = POST_MAX_PHOTOS - postPhotos.length;
+        if (remaining <= 0) { showToast("已達 9 張上限", 2600); return; }
+        let batch = files;
+        let truncated = false;
+        if (batch.length > remaining) { batch = batch.slice(0, remaining); truncated = true; }
+
+        let added = 0, cloudCount = 0, errorCount = 0;
+        for (const file of batch) {            // sequential、一張一張
+          const res = await buildPhotoEntry(file);
+          if (res.status === "ok")         { postPhotos.push(res.photo); added++; renderPostPhotos(); }
+          else if (res.status === "cloud") { cloudCount++; }
+          else                             { errorCount++; }
+        }
+
+        const skipped = cloudCount + errorCount;
+        if (added === 0) {
+          // 全部沒進來:若全是 NotReadableError(proxy)→ 友善退路;否則泛用提示
+          if (errorCount === 0 && cloudCount > 0) showCloudPhotoFallback();
+          else showToast("這些照片都讀不到或無法處理、請換幾張或改用拍照", 3500);
           return;
         }
-        // d. 暫存 + 預覽(previewUrl = 壓縮後 Blob 的 objectURL)
-        const previewUrl = URL.createObjectURL(result.blob);
-        postPhotos.push({ original: file, compressed: result.blob, previewUrl });
-        renderPostPhotos();
+        const msgs = [];
+        if (truncated)    msgs.push("最多 9 張、超過的沒加");
+        if (skipped > 0)  msgs.push("有 " + skipped + " 張讀不到已跳過");
+        if (msgs.length)  showToast(msgs.join("、") + "、其餘已加入", 3500);
       }
 
       /* ---- 入口 / 關閉 ---- */
@@ -2831,10 +2903,7 @@
       pickBack.addEventListener("click", closePickSheet);
       pickCancel.addEventListener("click", closePickSheet);
       pickCam.addEventListener("click", triggerCamera);   // 2b-2:接拍照
-      pickGal.addEventListener("click", () => {
-        console.log("[2b-2] 從相簿選 待 2b-3");
-        closePickSheet();
-      });
+      pickGal.addEventListener("click", triggerGallery);  // 2b-3:接相簿多張
 
       /* ---- 雲端退路 sheet ---- */
       cloudBack.addEventListener("click", closeCloudFallback);
@@ -2851,9 +2920,9 @@
         caption.style.height = Math.min(caption.scrollHeight, 200) + "px";
       });
 
-      /* ---- 分享(2b-2 仍只 console.log、真上傳留 2b-4)---- */
+      /* ---- 分享(2b-3 仍只 console.log、真上傳留 2b-4)---- */
       shareBtn.addEventListener("click", () => {
-        console.log("[2b-2] 分享 clicked, postPhotos:", postPhotos);
+        console.log("[2b-3] 分享 clicked, postPhotos:", postPhotos);
       });
 
       renderPostPhotos();   // 初始:空狀態 + 分享 disabled
