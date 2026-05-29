@@ -1139,6 +1139,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+    import { wireLikeButton } from "./post-likes.js";   // 貼文按讚共用(規則 2、toggle 寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -3180,8 +3181,9 @@
       const io = new IntersectionObserver((entries, obs) => {
         entries.forEach(en => { if (en.isIntersecting) { obs.unobserve(en.target); loadMemberPostPhoto(en.target); } });
       }, { rootMargin: "300px" });
+      const deviceId = getDeviceId();   // 沿用 Task 3 既有 getDeviceId(同 key、跨頁一致)
       posts.forEach(p => {
-        const card = createMemberPostCard(p);
+        const card = createMemberPostCard(p, deviceId);
         listEl.appendChild(card);
         const ph = card.querySelector("img[data-photo-fileid]");
         if (ph) io.observe(ph);
@@ -3190,15 +3192,14 @@
 
     /* 此頁單一作者:author 固定 = memberData(不需 members map)。
        重用既有 escapeHtml + formatCommentTime;照片走 ?id= 代理(同錄音、私有檔擁有者讀)。 */
-    function createMemberPostCard(post) {
+    function createMemberPostCard(post, deviceId) {
       const article = document.createElement("article");
       article.className = "post";
       const authorName = (memberData && (memberData.name || memberData.nickname)) || "家人";
       const authorInitials = (memberData && memberData.initials) || "??";
       const photos = Array.isArray(post.photos) ? post.photos : [];
       const first = photos[0];
-      const likeCount = Array.isArray(post.likes) ? post.likes.length : 0;        // 防 NaN:陣列取 length
-      const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
+      const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;  // 留言這輪純顯示
       const mediaHtml = first
         ? `<img data-photo-fileid="${escapeHtml(first.fileId)}" alt="${escapeHtml(authorName)} 的照片" />
            ${photos.length > 1 ? `<span style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>` : ""}`
@@ -3214,11 +3215,21 @@
         </header>
         <div class="post__media">${mediaHtml}</div>
         <div class="post__body">
-          <div class="post__likes">❤️ ${likeCount} 個讚 · 💬 ${commentCount} 則留言</div>
+          <div class="post__likes">
+            <button class="post-like-btn" aria-label="按讚" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;line-height:1;vertical-align:-3px;">🤍</button>
+            <span class="post-like-count">0</span> 個讚 · 💬 ${commentCount} 則留言
+          </div>
           ${post.text ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>` : ""}
           <p class="post__time">${formatCommentTime(post.createdAt)}</p>
         </div>
       `;
+      // ❤️ 接共用 wireLikeButton(樂觀更新 + 寫失敗還原、規則 4)
+      wireLikeButton({
+        btn: article.querySelector(".post-like-btn"),
+        countEl: article.querySelector(".post-like-count"),
+        db, postId: post.id, likes: post.likes, deviceId,
+        onError: () => showToast("按讚失敗、請再試")
+      });
       return article;
     }
 

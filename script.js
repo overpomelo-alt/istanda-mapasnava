@@ -13,6 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { getDeviceId, wireLikeButton } from "./post-likes.js";   // 貼文按讚共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -248,8 +249,9 @@ async function renderFeed(posts, membersMap) {
     });
   }, { rootMargin: "300px" });
 
+  const deviceId = getDeviceId();
   posts.forEach(p => {
-    const card = createPostCard(p, membersMap);
+    const card = createPostCard(p, membersMap, deviceId);
     section.appendChild(card);
     const ph = card.querySelector("img[data-photo-fileid]");
     if (ph) photoObserver.observe(ph);
@@ -275,7 +277,7 @@ async function loadCardPhoto(imgEl) {
   }
 }
 
-function createPostCard(post, membersMap) {
+function createPostCard(post, membersMap, deviceId) {
   const article = document.createElement("article");
   article.className = "post";
 
@@ -286,8 +288,7 @@ function createPostCard(post, membersMap) {
 
   const photos = Array.isArray(post.photos) ? post.photos : [];
   const first = photos[0];
-  const likeCount = Array.isArray(post.likes) ? post.likes.length : 0;          // 防 NaN:對陣列取 length
-  const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
+  const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;  // 留言這輪純顯示
 
   // 照片區:v1 先只載第一張(lazy、data-photo-fileid 等 observer 觸發);多張角落標 1/N
   const mediaHtml = first
@@ -312,13 +313,24 @@ function createPostCard(post, membersMap) {
     <div class="post__media">${mediaHtml}</div>
 
     <div class="post__body">
-      <div class="post__likes">❤️ ${formatCount(likeCount)} 個讚 · 💬 ${formatCount(commentCount)} 則留言</div>
+      <div class="post__likes">
+        <button class="post-like-btn" aria-label="按讚" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;line-height:1;vertical-align:-3px;">🤍</button>
+        <span class="post-like-count">0</span> 個讚 · 💬 ${formatCount(commentCount)} 則留言
+      </div>
       ${post.text
         ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>`
         : ""}
       <p class="post__time">${timeAgo(post.createdAt)}</p>
     </div>
   `;
+
+  // ❤️ 接共用 wireLikeButton(樂觀更新 + 寫失敗還原、規則 4)
+  wireLikeButton({
+    btn: article.querySelector(".post-like-btn"),
+    countEl: article.querySelector(".post-like-count"),
+    db, postId: post.id, likes: post.likes, deviceId,
+    onError: () => showToast("按讚失敗、請再試")
+  });
 
   return article;
 }
