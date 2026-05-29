@@ -28,6 +28,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+/* Apps Script 端點(2b-5:照片走 ?id= 代理、同錄音音檔那條;member.html 也用同一個 URL)*/
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAglNgdZo-KCyRaOYWRjrNhIQvjRC8exQn_ATqX7ozvTCKRsCTqLsWwAJDVEcKZQYnoQ/exec";
+
 /* ===== 全域狀態 ===== */
 let allMembers = [];                  // Firestore 抓來的成員清單,給 modal 列表用
 const ME_KEY = "istanda_me_id";       // localStorage key
@@ -218,156 +221,134 @@ function handleRecordPressed() {
 }
 
 /* ============================================================
-   5. 渲染「家族動態」貼文
+   5. 渲染「家族動態」貼文(2b-5:對齊真實 posts schema)
+   真實 post:{ memberId, photos:[{fileId,filename}], audioFileId, text, createdAt, likes:[], comments:[] }
    ============================================================ */
-async function renderFeed(posts) {
+async function renderFeed(posts, membersMap) {
   const section = document.getElementById("feedSection");
   section.innerHTML = "";
 
   if (!posts || posts.length === 0) {
     section.innerHTML = `
       <div class="feed-loading">
-        還沒有家族記事 ☘️<br/>
+        還沒有家族貼文 🌿<br/>
         <span style="font-size:12px; color:var(--text-muted); margin-top:8px; display:inline-block;">
-          按下方錄音鍵,留下第一段給家人的話
+          進到自己的頁面、按「📷 發貼文」、分享第一篇給家人
         </span>
       </div>`;
     return;
   }
 
-  posts.forEach(p => section.appendChild(createPostCard(p)));
+  // 照片 lazy-load:卡片捲進可視範圍才向 Apps Script 代理抓 base64(效能:照片代理較重)
+  const photoObserver = new IntersectionObserver((entries, obs) => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      obs.unobserve(en.target);
+      loadCardPhoto(en.target);
+    });
+  }, { rootMargin: "300px" });
+
+  posts.forEach(p => {
+    const card = createPostCard(p, membersMap);
+    section.appendChild(card);
+    const ph = card.querySelector("img[data-photo-fileid]");
+    if (ph) photoObserver.observe(ph);
+  });
 }
 
-function createPostCard(post) {
+/* 照片代理載入(規則 9:用錄音音檔同一條 ?id= 代理、私有檔靠後端擁有者身分讀;
+   絕不用 drive 直連 / iframe)。失敗 → 該張顯示佔位、不讓整張卡片爆掉(規則 4)。 */
+async function loadCardPhoto(imgEl) {
+  const fileId = imgEl.getAttribute("data-photo-fileid");
+  if (!fileId) return;
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?id=${encodeURIComponent(fileId)}`);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const base64 = await resp.text();
+    if (!base64 || base64.length < 50) throw new Error("empty");
+    imgEl.src = `data:image/jpeg;base64,${base64}`;   // 照片一律 jpeg(壓縮端輸出 image/jpeg)
+  } catch (err) {
+    console.warn("[feed] 照片載入失敗 fileId=" + fileId, err && err.message ? err.message : err);
+    const media = imgEl.closest(".post__media");
+    if (media) media.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;">照片載入失敗</div>`;
+  }
+}
+
+function createPostCard(post, membersMap) {
   const article = document.createElement("article");
   article.className = "post";
+
+  // 作者:memberId join members(renderFeed 已備好 map、不每張各查、規則 3)
+  const author = (membersMap && membersMap.get(post.memberId)) || {};
+  const authorName = author.name || author.nickname || "家人";
+  const authorInitials = author.initials || initialsOf(author.name) || "??";
+
+  const photos = Array.isArray(post.photos) ? post.photos : [];
+  const first = photos[0];
+  const likeCount = Array.isArray(post.likes) ? post.likes.length : 0;          // 防 NaN:對陣列取 length
+  const commentCount = Array.isArray(post.comments) ? post.comments.length : 0;
+
+  // 照片區:v1 先只載第一張(lazy、data-photo-fileid 等 observer 觸發);多張角落標 1/N
+  const mediaHtml = first
+    ? `<img data-photo-fileid="${escapeHtml(first.fileId)}" alt="${escapeHtml(authorName)} 的照片" />
+       ${photos.length > 1
+         ? `<span style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>`
+         : ""}`
+    : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;">(這篇沒有照片)</div>`;
 
   article.innerHTML = `
     <header class="post__header">
       <div class="post__user">
-        <div class="post__avatar-ring">
-          <div class="post__avatar-inner">
-            <div class="post__avatar">${post.authorInitials || "??"}</div>
-          </div>
-        </div>
+        <div class="post__avatar-ring"><div class="post__avatar-inner">
+          <div class="post__avatar">${escapeHtml(authorInitials)}</div>
+        </div></div>
         <div class="post__meta">
-          <span class="post__name">${post.authorName || ""}</span>
-          ${post.location ? `<span class="post__location">${post.location}</span>` : ""}
+          <span class="post__name">${escapeHtml(authorName)}</span>
         </div>
       </div>
-      <button class="icon-btn" aria-label="更多">
-        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
-      </button>
     </header>
 
-    <div class="post__media">
-      ${renderMedia(post)}
-      <div class="heart-burst">
-        <svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-9C.5 8 3 4 7 4c2 0 3.5 1 5 3 1.5-2 3-3 5-3 4 0 6.5 4 4.5 8-2.5 4.5-9.5 9-9.5 9z"/></svg>
-      </div>
-    </div>
-
-    <div class="post__actions">
-      <div class="post__actions-left">
-        <button class="action-btn js-like" aria-label="按讚">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-            <path d="M12 21s-7-4.5-9.5-9C.5 8 3 4 7 4c2 0 3.5 1 5 3 1.5-2 3-3 5-3 4 0 6.5 4 4.5 8-2.5 4.5-9.5 9-9.5 9z"/>
-          </svg>
-        </button>
-        <button class="action-btn" aria-label="留言">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-          </svg>
-        </button>
-        <button class="action-btn" aria-label="分享到 LINE">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-          </svg>
-        </button>
-      </div>
-      <button class="action-btn js-save" aria-label="收藏">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-        </svg>
-      </button>
-    </div>
+    <div class="post__media">${mediaHtml}</div>
 
     <div class="post__body">
-      <div class="post__likes">${formatCount(post.likes || 0)} 個讚</div>
-      <p class="post__caption">
-        <span class="post__caption-author">${post.authorName || ""}</span>
-        <span>${post.caption || ""}</span>
-      </p>
-      ${(post.comments || 0) > 0 ? `<button class="post__comments-link">查看全部 ${post.comments} 則留言</button>` : ""}
-      <p class="post__time">${post.timeAgo || "剛剛"}</p>
+      <div class="post__likes">❤️ ${formatCount(likeCount)} 個讚 · 💬 ${formatCount(commentCount)} 則留言</div>
+      ${post.text
+        ? `<p class="post__caption"><span class="post__caption-author">${escapeHtml(authorName)}</span> <span>${escapeHtml(post.text)}</span></p>`
+        : ""}
+      <p class="post__time">${timeAgo(post.createdAt)}</p>
     </div>
   `;
-
-  /* ===== 互動邏輯 ===== */
-  let likes = post.likes || 0;
-  let isLiked = false;
-  let isSaved = false;
-
-  const likeBtn = article.querySelector(".js-like");
-  const saveBtn = article.querySelector(".js-save");
-  const mediaEl = article.querySelector(".post__media");
-  const burstEl = article.querySelector(".heart-burst");
-  const likesEl = article.querySelector(".post__likes");
-
-  function toggleLike(forceTrue = false) {
-    const newState = forceTrue ? true : !isLiked;
-    if (newState === isLiked) return;
-    isLiked = newState;
-    likes += isLiked ? 1 : -1;
-    likesEl.textContent = `${formatCount(likes)} 個讚`;
-    likeBtn.classList.toggle("action-btn--liked", isLiked);
-    // TODO: Task 3 寫入 Firestore
-  }
-
-  likeBtn.addEventListener("click", () => toggleLike());
-
-  saveBtn.addEventListener("click", () => {
-    isSaved = !isSaved;
-    saveBtn.classList.toggle("action-btn--saved", isSaved);
-  });
-
-  // 雙擊愛心(行動裝置友善)
-  let lastTap = 0;
-  mediaEl.addEventListener("click", () => {
-    const now = Date.now();
-    if (now - lastTap < 350) {
-      toggleLike(true);
-      burstEl.classList.remove("is-burst");
-      void burstEl.offsetWidth;
-      burstEl.classList.add("is-burst");
-    }
-    lastTap = now;
-  });
 
   return article;
 }
 
-function renderMedia(post) {
-  if (post.googleDriveFileId) {
-    return `<iframe
-              src="https://drive.google.com/file/d/${post.googleDriveFileId}/preview"
-              allow="autoplay"
-              allowfullscreen></iframe>`;
-  }
-  if (post.image) {
-    return `<img src="${post.image}" alt="${post.authorName} 的記事" loading="lazy"/>`;
-  }
-  // 沒有媒體 = 純語音記事 → 顯示文字卡
-  return `
-    <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;background:linear-gradient(135deg,#2a2a2a,#1a1a1a);">
-      <span style="font-size:18px;line-height:1.6;color:var(--text);">${post.caption || ""}</span>
-    </div>`;
+/* createdAt(Firestore serverTimestamp)→ 相對時間。
+   剛寫入未解析(pending)= null → 「剛剛」(規則 4 防呆) */
+function timeAgo(ts) {
+  if (!ts) return "剛剛";
+  let d;
+  if (typeof ts.toDate === "function") d = ts.toDate();   // Firestore Timestamp
+  else if (ts.seconds != null) d = new Date(ts.seconds * 1000);
+  else d = new Date(ts);
+  const sec = (Date.now() - d.getTime()) / 1000;
+  if (isNaN(sec) || sec < 60) return "剛剛";
+  if (sec < 3600)  return Math.floor(sec / 60) + " 分鐘前";
+  if (sec < 86400) return Math.floor(sec / 3600) + " 小時前";
+  return Math.floor(sec / 86400) + " 天前";
 }
 
 function formatCount(n) {
   if (n >= 10000) return `${(n / 10000).toFixed(1)} 萬`;
   if (n >= 1000)  return `${(n / 1000).toFixed(1)}K`;
   return String(n);
+}
+
+/* 文字 / 屬性防注入(家人輸入的 text、名字可能含特殊字元;規則 4)*/
+function escapeHtml(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /* ============================================================
@@ -420,18 +401,18 @@ async function main() {
 
     applyMyIdentity();
 
-    // 抓貼文 (Firestore posts collection)
-    // ⚠️ v0 placeholder:posts collection 不存在於任何 spec、是 v0 留下的假資料源。
-    //   Task 5(6/2-6/8)會把 source 切到 recordings collection、屆時這段刪除。
-    //   詳見 specs/task-recording-core.md「🔁 posts → recordings 遷移計畫」章節。
+    // 抓貼文(Task 5 2b-5:posts 已是真實貼文來源、發貼文 modal 寫入)
+    // 作者用 memberId join members、先把 members 做成 map、不每張卡片各查(規則 3)
+    const membersMap = new Map(allMembers.map(m => [m.id, m]));
     try {
       const postsSnap = await getDocs(
         query(collection(db, "posts"), orderBy("createdAt", "desc"))
       );
       const posts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderFeed(posts);
+      renderFeed(posts, membersMap);
     } catch (err) {
-      // posts collection 還不存在 → empty state
+      // posts collection 還沒資料 / 讀取失敗 → 空狀態(規則 4)
+      console.warn("posts 讀取失敗或尚無資料:", err && err.message ? err.message : err);
       renderFeed([]);
     }
 
