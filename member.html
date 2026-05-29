@@ -795,24 +795,6 @@
     }
     .post-caption__count--over { color: #dc2743; }
 
-    /* 配音 toggle */
-    .post-voice {
-      display: flex; align-items: center; gap: 12px;
-      padding: 12px 14px;
-      background: var(--bg-soft);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-    }
-    .post-voice__label { font-size: 14px; color: var(--text-soft); flex: 1; }
-    .post-voice__btn {
-      font-size: 14px; font-weight: 600;
-      color: var(--text); background: var(--bg-elevated);
-      border: 1px solid var(--border); border-radius: 18px;
-      padding: 6px 16px; cursor: pointer; font-family: var(--font-sans);
-      transition: transform 0.15s;
-    }
-    .post-voice__btn:active { transform: scale(0.96); }
-
     /* footer:分享 */
     .post-modal__footer {
       flex-shrink: 0;
@@ -853,6 +835,14 @@
     .post-pick__btn:active { transform: scale(0.98); }
     .post-pick__btn:hover { background: var(--bg-soft); }
     .post-pick__btn--cancel { color: var(--text-muted); font-weight: 700; }
+    /* 雲端照片讀不到的友善退路訊息(放在 .post-pick__panel 內最上)*/
+    .post-cloud__msg {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-size: 14px; line-height: 1.6; color: var(--text-soft);
+    }
   </style>
 </head>
 <body>
@@ -1033,6 +1023,8 @@
           </button>
           <!-- 已選預覽列:2b-2 起 render 縮圖(每張右上 [×])、滿 9 張隱藏加照片入口 -->
           <div class="post-photos__strip" id="postPhotosStrip" hidden></div>
+          <!-- 拍照用 hidden input(capture=現拍、永遠本機、不踩 proxy)。2b-3 另加相簿 multiple input -->
+          <input type="file" accept="image/*" capture="environment" id="postCameraInput" hidden>
         </div>
 
         <!-- 2. caption -->
@@ -1041,11 +1033,7 @@
           <div class="post-caption__count" id="postCaptionCount" hidden>0 / 500</div>
         </div>
 
-        <!-- 3. 配音 toggle(純佔位、Step 2b-4 接 createRecorder 小工具、獨立 voiceRecorder 變數)-->
-        <div class="post-voice">
-          <span class="post-voice__label">🎤 配音(選填)</span>
-          <button class="post-voice__btn" id="postVoiceBtn" type="button">錄音</button>
-        </div>
+        <!-- 配音佔位已拿掉(2b-2 拍板:發貼文純照片、配音回個人頁)-->
       </div>
 
       <!-- 4. 底部固定:分享(初始 disabled、沒照片不能分享)-->
@@ -1064,6 +1052,22 @@
       <button class="post-pick__btn post-pick__btn--cancel" id="postPickCancel" type="button">取消</button>
     </div>
   </div>
+
+  <!-- 雲端照片讀不到(NotReadableError)友善退路 sheet(規則 4:不讓家人卡在白畫面)-->
+  <div id="postCloudFallback" class="post-pick" hidden>
+    <div class="post-pick__backdrop" id="postCloudBackdrop"></div>
+    <div class="post-pick__panel">
+      <div class="post-cloud__msg">
+        這張照片需要從雲端載入、目前無法直接讀取。<br>
+        建議改用相機拍一張(最快、最穩定);或先在「Google 相簿」打開這張照片、再回來重新選一次。
+      </div>
+      <button class="post-pick__btn" id="postCloudRetryCamera" type="button">📷 改用相機拍一張</button>
+      <button class="post-pick__btn post-pick__btn--cancel" id="postCloudCancel" type="button">取消</button>
+    </div>
+  </div>
+
+  <!-- HEIF/HEIC → JPEG 轉檔(iPhone 相簿原圖偶為 HEIF;Step 2b-2 引入、全域 heic2any)-->
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
   <!-- ============ Firebase + 應用邏輯 ============ -->
   <script type="module">
@@ -2627,11 +2631,11 @@
     }
 
     /* ============================================================
-       Task 5 Step 2b-1:發貼文 Modal(純 UI 殼)
-       ⚠️ 這一子步只做 UI。拍照 / 選照片 / 配音 / 分享 按鈕點了只 console.log、
-       不接任何上傳 / 壓縮 / 錄音 / Firestore 邏輯。
-       compressFromImg / compressPhoto / loadRawImage 四層鏈已保留為上方內部函式、
-       2b-2 接「拍照 → compressFromImg + arrayBuffer 守門 + NotReadableError 友善退路」時直接複用。
+       Task 5 Step 2b-2:發貼文 Modal — 拍照入口 + 守門 + HEIF 轉檔 + compressFromImg 主路徑
+       ⚠️ 範圍:只接「📷 拍照」(現拍永遠本機、不踩 proxy)、只接 1 張。
+       「🖼️ 從相簿選」留 2b-3、真上傳/Firestore 留 2b-4、分享鈕仍只 console.log。
+       既有 compressFromImg / compressPhoto / loadRawImage 四層 / waitDisplayImgReady /
+       readExifOrientation 一字未動(規則 9)、這裡用新 helper compressViaDisplayedImg 呼叫它們。
        ============================================================ */
     (function setupPostModal() {
       const entryBtn   = document.getElementById("postEntryBtn");
@@ -2642,9 +2646,10 @@
       const cancelBtn  = document.getElementById("postModalCancel");
       const closeBtn   = document.getElementById("postModalClose");
       const addEmpty   = document.getElementById("postAddPhotoEmpty");
+      const strip      = document.getElementById("postPhotosStrip");
+      const camInput   = document.getElementById("postCameraInput");
       const caption    = document.getElementById("postCaption");
       const captionCnt = document.getElementById("postCaptionCount");
-      const voiceBtn   = document.getElementById("postVoiceBtn");
       const shareBtn   = document.getElementById("postShareBtn");
 
       const pickSheet  = document.getElementById("postPickSheet");
@@ -2653,47 +2658,190 @@
       const pickGal    = document.getElementById("postPickGallery");
       const pickCancel = document.getElementById("postPickCancel");
 
-      const CAPTION_MAX = 500;
+      const cloudSheet  = document.getElementById("postCloudFallback");
+      const cloudBack   = document.getElementById("postCloudBackdrop");
+      const cloudRetry  = document.getElementById("postCloudRetryCamera");
+      const cloudCancel = document.getElementById("postCloudCancel");
 
+      const CAPTION_MAX = 500;
+      // 已選照片暫存:每筆 { original:File(原始), compressed:Blob(壓縮後、2b-4 上傳用), previewUrl:string(縮圖) }。
+      // 2b-2 只 push 1 筆;2b-3 多張沿用同結構。
+      const postPhotos = [];
+
+      /* ---- 開關 ---- */
       function openPostModal() {
         modal.hidden = false;
-        document.body.style.overflow = "hidden";   // 鎖背景捲動(規則 5:離開時還原)
+        document.body.style.overflow = "hidden";   // 鎖背景捲動(規則 5:關閉時還原)
       }
       function closePostModal() {
         modal.hidden = true;
         closePickSheet();
+        closeCloudFallback();
+        clearPostPhotos();                         // 規則 5:離開清乾淨、釋放 objectURL
+        caption.value = "";
+        captionCnt.hidden = true;
+        caption.style.height = "auto";
         document.body.style.overflow = "";
       }
-      function openPickSheet()  { pickSheet.hidden = false; }
-      function closePickSheet() { if (pickSheet) pickSheet.hidden = true; }
+      function openPickSheet()      { pickSheet.hidden = false; }
+      function closePickSheet()     { if (pickSheet) pickSheet.hidden = true; }
+      function showCloudPhotoFallback() { cloudSheet.hidden = false; } // 規則 4:NotReadableError 友善退路
+      function closeCloudFallback() { if (cloudSheet) cloudSheet.hidden = true; }
 
-      // 入口
+      /* ---- 照片預覽 render / 刪除 / 清空 ---- */
+      function renderPostPhotos() {
+        strip.innerHTML = "";
+        if (postPhotos.length === 0) {
+          addEmpty.hidden = false;
+          strip.hidden = true;
+        } else {
+          addEmpty.hidden = true;   // 2b-2 只接 1 張;2b-3 改成 <9 張時顯示「加更多」tile
+          strip.hidden = false;
+          postPhotos.forEach((p, idx) => {
+            const thumb = document.createElement("div");
+            thumb.className = "post-photo-thumb";
+            const img = document.createElement("img");
+            img.src = p.previewUrl;
+            img.alt = "照片預覽";
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className = "post-photo-thumb__del";
+            del.setAttribute("aria-label", "刪除這張");
+            del.textContent = "✕";
+            del.addEventListener("click", () => removePhoto(idx));
+            thumb.appendChild(img);
+            thumb.appendChild(del);
+            strip.appendChild(thumb);
+          });
+        }
+        shareBtn.disabled = postPhotos.length === 0;   // 有照片才能分享
+      }
+      function removePhoto(idx) {
+        const p = postPhotos[idx];
+        if (p && p.previewUrl) URL.revokeObjectURL(p.previewUrl); // 規則 5:釋放 objectURL
+        postPhotos.splice(idx, 1);
+        renderPostPhotos();
+      }
+      function clearPostPhotos() {
+        postPhotos.forEach(p => { if (p.previewUrl) URL.revokeObjectURL(p.previewUrl); });
+        postPhotos.length = 0;
+        renderPostPhotos();
+      }
+
+      /* ---- 拍照 ---- */
+      function triggerCamera() {
+        closeCloudFallback();
+        closePickSheet();
+        camInput.value = "";   // 清舊值、允許重拍同一張也觸發 change
+        camInput.click();
+      }
+      camInput.addEventListener("change", async () => {
+        const file = camInput.files && camInput.files[0];
+        camInput.value = "";   // 立刻清、避免殘留
+        if (!file) return;
+        await handlePickedFile(file);
+      });
+
+      // HEIF 判斷(type 或副檔名)
+      function isHeic(file) {
+        const t = (file.type || "").toLowerCase();
+        const n = (file.name || "").toLowerCase();
+        return t === "image/heic" || t === "image/heif" || n.endsWith(".heic") || n.endsWith(".heif");
+      }
+      // HEIF → JPEG(命中才轉、否則原樣回);heic2any 全域(CDN)
+      async function maybeConvertHeic(file) {
+        if (!isHeic(file)) return file;
+        if (typeof heic2any !== "function") throw new Error("HEIC_LIB_MISSING");
+        const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+        const jpeg = Array.isArray(out) ? out[0] : out;
+        const newName = (file.name || "photo").replace(/\.(heic|heif)$/i, "") + ".jpg";
+        return new File([jpeg], newName, { type: "image/jpeg" });
+      }
+
+      /* 用既有「已載入 img → drawImage」主路徑壓縮(Step 2a 驗證、compressFromImg/四層鏈不動):
+         建臨時 img 載入 file、ready 後走 compressFromImg;失敗退回 compressPhoto(file) 四層鏈。 */
+      async function compressViaDisplayedImg(file) {
+        const url = URL.createObjectURL(file);
+        const img = document.createElement("img");
+        img.style.cssText = "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none;";
+        img.src = url;
+        document.body.appendChild(img);
+        try {
+          try {
+            await waitDisplayImgReady(img);
+            return await compressFromImg(img);
+          } catch (displayErr) {
+            console.warn("[2b-2] 主路徑 compressFromImg 失敗、退四層鏈:", displayErr && displayErr.message);
+            return await compressPhoto(file);
+          }
+        } finally {
+          if (img.parentNode) img.parentNode.removeChild(img);
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      /* 收到拍照 File → (a)守門 →(b)HEIF 轉檔 →(c)主路徑壓縮 →(d)預覽暫存。 */
+      async function handlePickedFile(file) {
+        if (!file) return;
+        // a. arrayBuffer 守門(規則 4:NotReadableError 不能漏網;proxy URI 在此攔下)
+        try {
+          await file.arrayBuffer();
+        } catch (err) {
+          if (err && err.name === "NotReadableError") { showCloudPhotoFallback(); return; }
+          throw err;                               // 其他錯誤往上拋
+        }
+        // b. HEIF → JPEG
+        let working;
+        try {
+          working = await maybeConvertHeic(file);
+        } catch (e) {
+          console.warn("[2b-2] HEIF 轉檔失敗:", e && e.message ? e.message : e);
+          showToast("這張照片格式不支援、請用相機重拍", 3200);
+          return;
+        }
+        // c. compressFromImg 主路徑(既有四層鏈當後備、都不動)
+        let result;
+        try {
+          result = await compressViaDisplayedImg(working);
+        } catch (e) {
+          console.error("[2b-2] 壓縮失敗:", e && e.message ? e.message : e);
+          showToast("這張照片無法處理、請換一張或重拍", 3200);
+          return;
+        }
+        // d. 暫存 + 預覽(previewUrl = 壓縮後 Blob 的 objectURL)
+        const previewUrl = URL.createObjectURL(result.blob);
+        postPhotos.push({ original: file, compressed: result.blob, previewUrl });
+        renderPostPhotos();
+      }
+
+      /* ---- 入口 / 關閉 ---- */
       entryBtn.addEventListener("click", openPostModal);
-
-      // 關閉:取消 / ✕ / 遮罩 / Esc(Esc 先關 ActionSheet、再關 modal)
       cancelBtn.addEventListener("click", closePostModal);
       closeBtn.addEventListener("click", closePostModal);
       backdrop.addEventListener("click", closePostModal);
       document.addEventListener("keydown", (e) => {
         if (e.key !== "Escape") return;
-        if (!pickSheet.hidden) { closePickSheet(); return; }
-        if (!modal.hidden) closePostModal();
+        if (!cloudSheet.hidden) { closeCloudFallback(); return; }
+        if (!pickSheet.hidden)  { closePickSheet(); return; }
+        if (!modal.hidden)      closePostModal();
       });
 
-      // 加照片 → ActionSheet 二選一(2b-1 純 UI、只 console.log)
+      /* ---- 加照片 ActionSheet ---- */
       addEmpty.addEventListener("click", openPickSheet);
       pickBack.addEventListener("click", closePickSheet);
       pickCancel.addEventListener("click", closePickSheet);
-      pickCam.addEventListener("click", () => {
-        console.log("[2b-1] 拍照入口 clicked"); // Step 2b-2 接 <input capture="environment"> + compressFromImg
-        closePickSheet();
-      });
+      pickCam.addEventListener("click", triggerCamera);   // 2b-2:接拍照
       pickGal.addEventListener("click", () => {
-        console.log("[2b-1] 從相簿選 入口 clicked"); // Step 2b-3 接 accept="image/*" multiple
+        console.log("[2b-2] 從相簿選 待 2b-3");
         closePickSheet();
       });
 
-      // caption:字數計數 + 自動展開高度(maxlength=500 已硬限、計數提示用)
+      /* ---- 雲端退路 sheet ---- */
+      cloudBack.addEventListener("click", closeCloudFallback);
+      cloudCancel.addEventListener("click", closeCloudFallback);
+      cloudRetry.addEventListener("click", triggerCamera);
+
+      /* ---- caption 計數 + 自動展開(maxlength=500 已硬限)---- */
       caption.addEventListener("input", () => {
         const len = caption.value.length;
         captionCnt.hidden = len === 0;
@@ -2703,15 +2851,12 @@
         caption.style.height = Math.min(caption.scrollHeight, 200) + "px";
       });
 
-      // 配音(純佔位、Step 2b-4 接 createRecorder 小工具、獨立 voiceRecorder 變數、不共用頁面錄音器)
-      voiceBtn.addEventListener("click", () => {
-        console.log("[2b-1] 配音 錄音 clicked");
+      /* ---- 分享(2b-2 仍只 console.log、真上傳留 2b-4)---- */
+      shareBtn.addEventListener("click", () => {
+        console.log("[2b-2] 分享 clicked, postPhotos:", postPhotos);
       });
 
-      // 分享(初始 disabled、沒照片不能分享;handler 預留、2b-4 接上傳 + Firestore)
-      shareBtn.addEventListener("click", () => {
-        console.log("[2b-1] 分享 clicked");
-      });
+      renderPostPhotos();   // 初始:空狀態 + 分享 disabled
     })();
 
     main();
