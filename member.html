@@ -2639,12 +2639,13 @@
     }
 
     /* ============================================================
-       Task 5 Step 2b-3:發貼文 Modal — 拍照(單張)+ 從相簿選(多張 1-9)+ sequential 壓縮 + 預覽列
-       ⚠️ 範圍:接「📷 拍照」+「🖼️ 從相簿選」(multiple、sequential、失敗隔離)。
-       真上傳/Firestore 留 2b-4(分享鈕仍只 console.log)。
+       Task 5 Step 2b-4a:發貼文 Modal — 拍照 / 相簿選(2b-2/2b-3)+ 分享→照片上傳 Drive + claimed-set 差集
+       ⚠️ 2b-4a 範圍:分享按下後逐張上傳 Drive、差集拿每張 fileId。先不寫 Firestore posts(2b-4b)、
+       成功後 modal 不關 / postPhotos 不清(2b-4b 收尾)。
+       後端 doPost 已支援照片(key "audio" + filename .jpg → image/jpeg、apps-script/istanda-mapasnava-receiver.gs)。
+       上傳走新小工具 postBlobToAppsScript + claimNewFileId、handleUpload 舊錄音一行不動(規則 9)。
        既有 compressFromImg / compressPhoto / loadRawImage 四層 / waitDisplayImgReady /
-       readExifOrientation 一字未動(規則 9)、用 helper compressViaDisplayedImg 呼叫它們。
-       單張 / 多張共用核心 buildPhotoEntry(規則 2:不重寫流程)。
+       readExifOrientation 一字未動;單張/多張共用 buildPhotoEntry(規則 2)。
        ============================================================ */
     (function setupPostModal() {
       const entryBtn   = document.getElementById("postEntryBtn");
@@ -2920,9 +2921,86 @@
         caption.style.height = Math.min(caption.scrollHeight, 200) + "px";
       });
 
-      /* ---- 分享(2b-3 仍只 console.log、真上傳留 2b-4)---- */
-      shareBtn.addEventListener("click", () => {
-        console.log("[2b-3] 分享 clicked, postPhotos:", postPhotos);
+      /* 共用上傳小工具(規則 2/11:POST blind 那段抽出、handleUpload 舊錄音一行不動)。
+         任意 blob(照片/音檔)→ base64 → POST。後端 doPost key 是 "audio"、從 filename 副檔名
+         推 mimeType(.jpg→image/jpeg)、寫進該成員子資料夾。跨域 redirect 拿不到 response、
+         不解析(blind)、fileId 由 claimNewFileId 撈。 */
+      async function postBlobToAppsScript(blob, filename, memberId, memberName, folderId) {
+        const base64 = await blobToBase64(blob);   // 既有共用、剝 data: 前綴回純 base64
+        await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            audio: base64,
+            filename,
+            memberId,
+            memberName: memberName || "",
+            folderId: folderId || ""
+          })
+        });
+      }
+
+      /* 差集撈 fileId(現行 Step 1 雙模式形狀、非 spec 舊扁平 listData[memberId]):
+         有 driveFolderId → 主路徑 data.files;無 → 保底 data.result[memberId]。
+         retry 3 次間隔 500ms、找第一筆「fileId 不在 claimed 裡」的(同檔名多張靠 fileId 唯一分辨)。 */
+      async function claimNewFileId(memberId, driveFolderId, claimed) {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          let files = [];
+          try {
+            if (driveFolderId) {
+              const resp = await fetch(`${APPS_SCRIPT_URL}?action=list&folderId=${encodeURIComponent(driveFolderId)}`);
+              const data = await resp.json();
+              files = (data && data.files) || [];
+            } else {
+              const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+              const data = await resp.json();
+              files = (data && data.result && data.result[memberId]) || [];
+            }
+          } catch (e) {
+            console.warn("[2b-4a] claim GET 失敗、retry " + attempt, e && e.message ? e.message : e);
+          }
+          const fresh = files.find(f => f.fileId && !claimed.includes(f.fileId));
+          if (fresh) return { fileId: fresh.fileId, filename: fresh.filename };
+          if (attempt < 3) await new Promise(r => setTimeout(r, 500));
+        }
+        throw new Error("CLAIM_FAILED");   // 3 次都沒撈到新 fileId
+      }
+
+      /* ---- 分享 → 照片上傳 Drive + 差集(2b-4a:先不寫 Firestore posts)---- */
+      let uploading = false;
+      shareBtn.addEventListener("click", async () => {
+        if (uploading || postPhotos.length === 0) return;
+        const mId = memberId;
+        if (!mId) { showToast("找不到成員、請重新整理頁面再試", 3000); return; }  // 規則 4
+
+        uploading = true;
+        shareBtn.disabled = true;
+        const mName = (memberData && memberData.name) || "";
+        const driveFolderId = (memberData && memberData.driveFolderId) || "";
+        const blobs = postPhotos.map(p => p.compressed);  // 快照:避免上傳途中陣列被動(規則 4 防呆)
+        const total = blobs.length;
+        const claimed = [];
+        const uploaded = [];   // [{fileId, filename}]
+
+        try {
+          for (let i = 0; i < total; i++) {                 // sequential、絕不 Promise.all
+            shareBtn.textContent = `上傳中 ${i + 1}/${total}`;
+            await postBlobToAppsScript(blobs[i], `${mId}.jpg`, mId, mName, driveFolderId); // 不重壓、直接送 compressed
+            await new Promise(r => setTimeout(r, 300));      // 降 race、給 Drive 寫入緩衝
+            const f = await claimNewFileId(mId, driveFolderId, claimed);
+            claimed.push(f.fileId);
+            uploaded.push(f);
+          }
+          console.log("[2b-4a] uploaded:", uploaded);
+          showToast(total + " 張上傳完成(2b-4b 接寫貼文)", 3000);
+          // 2b-4a 結尾:modal 不關、postPhotos 不清(2b-4b 才收尾)
+        } catch (err) {
+          console.error("[2b-4a] 上傳失敗:", err && err.message ? err.message : err);
+          showToast("第 " + (uploaded.length + 1) + " 張上傳失敗、請再試", 3500);  // 規則 4:停迴圈、不關 modal、保留照片
+        } finally {
+          uploading = false;
+          shareBtn.disabled = postPhotos.length === 0;
+          shareBtn.textContent = "分享";
+        }
       });
 
       renderPostPhotos();   // 初始:空狀態 + 分享 disabled
