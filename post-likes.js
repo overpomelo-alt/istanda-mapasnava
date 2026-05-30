@@ -99,20 +99,170 @@ function ensureSheet() {
         <button class="pcs__close" data-pcs-close type="button" aria-label="關閉">✕</button>
       </div>
       <div class="pcs__list" id="pcsList"></div>
-      <div class="pcs__inputrow">
+      <div class="pcs__modetabs">
+        <button class="pcs__modetab pcs__modetab--on" id="pcsModeText" type="button">打字</button>
+        <button class="pcs__modetab" id="pcsModeAudio" type="button">錄音</button>
+      </div>
+      <div class="pcs__inputrow" id="pcsTextRow">
         <textarea class="pcs__input" id="pcsInput" rows="1" placeholder="說點什麼…"></textarea>
         <button class="pcs__submit" id="pcsSubmit" type="button">送出</button>
+      </div>
+      <div class="pcs__inputrow pcs__audiorow" id="pcsAudioRow" hidden>
+        <div class="pcs__rec" id="pcsRec">
+          <button class="pcs__recbtn" id="pcsRecBtn" type="button">🎤 點一下開始錄</button>
+          <button class="pcs__recplay" id="pcsRecPlay" type="button" hidden>▶ 試聽</button>
+          <button class="pcs__recreset" id="pcsRecReset" type="button" hidden>↻ 重錄</button>
+        </div>
+        <button class="pcs__submit" id="pcsAudioSubmit" type="button" disabled>送出</button>
+        <audio id="pcsRecAudio" hidden></audio>
       </div>
     </div>`;
   document.body.appendChild(el);
   el.querySelectorAll("[data-pcs-close]").forEach(b => b.addEventListener("click", closeSheet));
   el.querySelector("#pcsSubmit").addEventListener("click", onSubmit);
+  el.querySelector("#pcsModeText").addEventListener("click", () => setMode("text"));
+  el.querySelector("#pcsModeAudio").addEventListener("click", () => setMode("audio"));
+  el.querySelector("#pcsRecBtn").addEventListener("click", onRecBtn);
+  el.querySelector("#pcsRecPlay").addEventListener("click", onRecPlay);
+  el.querySelector("#pcsRecReset").addEventListener("click", vcReset);
   _sheet = el;
   return el;
 }
 
+/* ============================================================
+   VC-2:留言區獨立小錄音(狀態完全獨立於 Task1、不共用任何全域)
+   ============================================================ */
+let _vcRecorder = null;   // MediaRecorder
+let _vcStream   = null;   // 麥克風 stream(release 用)
+let _vcChunks   = [];
+let _vcBlob     = null;
+let _vcExt      = "webm";
+let _vcTimer    = null;   // 計時 interval
+let _vcAutoStop = null;   // 60 秒上限 timeout
+let _vcSec      = 0;
+let _vcDuration = 0;      // VC-3 要用的 durationSec
+let _vcPlayUrl  = null;
+const VC_LIMIT_SEC = 60;
+
+// 複製 Task1 的 pickMimeType(複製、不共用、規則 11）
+function vcPickMime() {
+  if (typeof MediaRecorder === "undefined") return null;
+  if (MediaRecorder.isTypeSupported("audio/webm")) return { mime: "audio/webm", ext: "webm" };
+  if (MediaRecorder.isTypeSupported("audio/mp4"))  return { mime: "audio/mp4", ext: "mp4" };
+  return null;
+}
+
+function setMode(mode) {
+  if (!_sheet) return;
+  const textRow  = _sheet.querySelector("#pcsTextRow");
+  const audioRow = _sheet.querySelector("#pcsAudioRow");
+  const tabText  = _sheet.querySelector("#pcsModeText");
+  const tabAudio = _sheet.querySelector("#pcsModeAudio");
+  if (mode === "audio") {
+    textRow.hidden = true; audioRow.hidden = false;
+    tabAudio.classList.add("pcs__modetab--on"); tabText.classList.remove("pcs__modetab--on");
+  } else {
+    vcReset();   // 切回打字 → 清掉錄音狀態(規則 5)
+    audioRow.hidden = true; textRow.hidden = false;
+    tabText.classList.add("pcs__modetab--on"); tabAudio.classList.remove("pcs__modetab--on");
+  }
+}
+
+function vcSetRecUI(stage) {
+  // stage: idle | recording | done
+  const btn   = _sheet.querySelector("#pcsRecBtn");
+  const play  = _sheet.querySelector("#pcsRecPlay");
+  const reset = _sheet.querySelector("#pcsRecReset");
+  const submit= _sheet.querySelector("#pcsAudioSubmit");
+  if (stage === "recording") {
+    btn.textContent = "⏹ 停止 0:00"; btn.hidden = false;
+    play.hidden = true; reset.hidden = true; submit.disabled = true;
+  } else if (stage === "done") {
+    btn.hidden = true;
+    play.hidden = false; reset.hidden = false; submit.disabled = false;
+  } else { // idle
+    btn.textContent = "🎤 點一下開始錄"; btn.hidden = false;
+    play.hidden = true; reset.hidden = true; submit.disabled = true;
+  }
+}
+
+async function onRecBtn() {
+  if (_vcRecorder && _vcRecorder.state === "recording") { vcStopRec(); return; }
+  await vcStartRec();
+}
+
+async function vcStartRec() {
+  const picked = vcPickMime();
+  if (!picked) {
+    if (_state && _state.showToast) _state.showToast("這台裝置不支援錄音、請換瀏覽器");
+    return;
+  }
+  try {
+    _vcStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    console.warn("[vc] getUserMedia 失敗:", err && err.message ? err.message : err);
+    if (_state && _state.showToast) _state.showToast("⚠ 麥克風被擋住了、到瀏覽器設定允許");
+    return;
+  }
+  _vcChunks = []; _vcBlob = null; _vcExt = picked.ext; _vcSec = 0; _vcDuration = 0;
+  _vcRecorder = new MediaRecorder(_vcStream, { mimeType: picked.mime });
+  _vcRecorder.ondataavailable = e => { if (e.data.size > 0) _vcChunks.push(e.data); };
+  _vcRecorder.onstop = () => {
+    if (_vcStream) { _vcStream.getTracks().forEach(t => t.stop()); _vcStream = null; }
+    _vcBlob = new Blob(_vcChunks, { type: picked.mime });
+    _vcDuration = _vcSec;
+    if (_vcTimer) { clearInterval(_vcTimer); _vcTimer = null; }
+    if (_vcAutoStop) { clearTimeout(_vcAutoStop); _vcAutoStop = null; }
+    vcSetRecUI("done");
+  };
+  _vcRecorder.start();
+  vcSetRecUI("recording");
+  const btn = _sheet.querySelector("#pcsRecBtn");
+  _vcTimer = setInterval(() => {
+    _vcSec += 1;
+    const mm = Math.floor(_vcSec / 60), ss = String(_vcSec % 60).padStart(2, "0");
+    btn.textContent = `⏹ 停止 ${mm}:${ss}`;
+  }, 1000);
+  _vcAutoStop = setTimeout(() => {
+    if (_state && _state.showToast) _state.showToast("⏱ 已達 60 秒上限、自動停止");
+    vcStopRec();
+  }, VC_LIMIT_SEC * 1000);
+}
+
+function vcStopRec() {
+  if (_vcRecorder && _vcRecorder.state === "recording") _vcRecorder.stop();
+}
+
+function onRecPlay() {
+  if (!_vcBlob) return;
+  const audio = _sheet.querySelector("#pcsRecAudio");
+  if (_vcPlayUrl) URL.revokeObjectURL(_vcPlayUrl);
+  _vcPlayUrl = URL.createObjectURL(_vcBlob);
+  audio.src = _vcPlayUrl;
+  audio.play().catch(() => {});
+}
+
+// 重置:停 recorder、釋放麥克風、清狀態、UI 回 idle(規則 5)
+function vcReset() {
+  if (_vcRecorder && _vcRecorder.state === "recording") {
+    try { _vcRecorder.stop(); } catch (e) {}
+  }
+  if (_vcStream) { _vcStream.getTracks().forEach(t => t.stop()); _vcStream = null; }
+  if (_vcTimer) { clearInterval(_vcTimer); _vcTimer = null; }
+  if (_vcAutoStop) { clearTimeout(_vcAutoStop); _vcAutoStop = null; }
+  if (_vcPlayUrl) { URL.revokeObjectURL(_vcPlayUrl); _vcPlayUrl = null; }
+  _vcRecorder = null; _vcChunks = []; _vcBlob = null; _vcSec = 0; _vcDuration = 0;
+  if (_sheet) {
+    const audio = _sheet.querySelector("#pcsRecAudio");
+    if (audio) { audio.pause(); audio.removeAttribute("src"); }
+    vcSetRecUI("idle");
+  }
+}
+
 function closeSheet() {
   if (_sheet) _sheet.hidden = true;
+  vcReset();           // 關視窗 → 清錄音狀態(規則 5)
+  setMode("text");     // 下次開回到打字預設
   _state = null;
 }
 
