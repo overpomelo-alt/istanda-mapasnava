@@ -592,6 +592,7 @@ img { display: block; max-width: 100%; }
 
 /* ===== 貼文留言 sheet(.pcs-*、首頁 + 個人頁共用、post-likes.js 注入 DOM)===== */
 .pcs { position: fixed; inset: 0; z-index: 1600; display: flex; align-items: flex-end; justify-content: center; }
+.pcs[hidden] { display: none !important; }
 .pcs__backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
 .pcs__panel {
   position: relative; width: 100%; max-width: var(--max-w);
