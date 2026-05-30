@@ -224,7 +224,7 @@ export async function sharePost(post, authorName) {
   const text = post.text ? post.text.slice(0, 40) : "來看看這篇家族貼文";
   if (navigator.share) {
     try {
-      await navigator.share({ title: who + " · Istanda Mapasnava", text, url });
+      await navigator.share({ title: who + " · Istanda Takiscipanan", text, url });
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;   // 使用者取消、不再開 LINE
