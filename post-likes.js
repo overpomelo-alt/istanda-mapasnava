@@ -126,8 +126,19 @@ function renderCommentList(comments) {
   comments.forEach(c => {
     const row = document.createElement("div");
     row.className = "pcs__row";
-    row.innerHTML = `<div class="pcs__author">${esc(c.authorName || "家人")}</div>` +
-                    `<div class="pcs__text">${esc(c.text || "")}</div>`;
+    const author = `<div class="pcs__author">${esc(c.authorName || "家人")}</div>`;
+    if (c.type === "audio") {
+      // VC-1:語音留言。先只渲染按鈕、不綁 click(VC-3 才接 playRecording)
+      const dur = (typeof c.durationSec === "number" && c.durationSec > 0)
+        ? ` ${Math.floor(c.durationSec / 60)}:${String(Math.floor(c.durationSec % 60)).padStart(2, "0")}`
+        : "";
+      row.innerHTML = author +
+        `<button class="pcs__voice" data-fileid="${esc(c.audioFileId || "")}" data-filename="${esc(c.audioFilename || "")}">▶ 語音${dur}</button>`;
+    } else {
+      // type==="text" 或舊留言無 type(規則 8 向後相容)→ 文字路徑不動
+      row.innerHTML = author +
+                      `<div class="pcs__text">${esc(c.text || "")}</div>`;
+    }
     list.appendChild(row);
   });
 }
