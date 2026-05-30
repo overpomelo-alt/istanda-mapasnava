@@ -15,9 +15,20 @@
     <div class="app-header__inner">
       <div class="app-brand">
         <span class="app-logo" aria-hidden="true">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <circle cx="7" cy="7" r="2.3" fill="currentColor"/>
-            <path d="M2.5 19 L9 9.5 L13 15 L16 11 L21.5 19 Z" fill="currentColor"/>
+          <svg viewBox="0 0 100 80" fill="none" width="34" height="27">
+            <defs>
+              <linearGradient id="istandaMoon" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#F6EEDD"/><stop offset="100%" stop-color="#DDA63A"/>
+              </linearGradient>
+              <linearGradient id="istandaLine" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="66">
+                <stop offset="0%" stop-color="#C6DDD2"/><stop offset="100%" stop-color="#8CB89A"/>
+              </linearGradient>
+            </defs>
+            <path d="M60 8 A 10.5 10.5 0 0 1 60 23" stroke="url(#istandaMoon)" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <path d="M34 46 Q40 44 46 28 Q52 42 62 48 Q76 56 90 59" stroke="url(#istandaLine)" stroke-width="3" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            <path d="M10 56 Q18 52 26 38 Q30 44 38 45" stroke="url(#istandaLine)" stroke-width="2.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            <path d="M52 47 Q58 44 63 41 Q70 47 80 55" stroke="url(#istandaLine)" stroke-width="2.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+            <path d="M14 59 Q30 53 40 57 Q48 61 56 57 Q70 51 86 59" stroke="url(#istandaLine)" stroke-width="2.7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
           </svg>
         </span>
         <h1 class="app-title">Istanda Mapasnava</h1>

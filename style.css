@@ -123,9 +123,11 @@ img { display: block; max-width: 100%; }
 /* 首頁左上 logo:山+太陽方塊 + 標題包一層 flex */
 .app-brand { display: inline-flex; align-items: center; gap: 8px; }
 .app-logo {
-  width: 30px; height: 30px; border-radius: 8px;
-  background: var(--bunun-black); color: var(--bunun-white);
-  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 40px; height: 40px;
+  border-radius: 9px;
+  background: radial-gradient(circle at 50% 42%, #244766 0%, #16283A 55%, #0A1017 100%);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none;
 }
 
 /* ============================================================
