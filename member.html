@@ -56,7 +56,7 @@
       width: 82px; height: 82px;
       border-radius: 50%;
       padding: 3px;
-      background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+      background: var(--bunun-red);
       flex-shrink: 0;
     }
     .member-hero__ring-inner {
@@ -114,7 +114,7 @@
       width: 100px; height: 100px;
       margin: 0 auto;
       border-radius: 50%;
-      background: linear-gradient(135deg, #f09433, #dc2743);
+      background: var(--bunun-red);
       display: flex; align-items: center; justify-content: center;
       border: none;
       cursor: pointer;
@@ -191,7 +191,7 @@
     }
     /* 上傳（spec line 128:強調動作漸層 + 白字、子步 3c 才接邏輯、現在 disabled）*/
     .playback-btn--upload {
-      background: linear-gradient(135deg, #f09433, #dc2743);
+      background: var(--bunun-red);
       color: #fff;
       border: none;
     }
@@ -526,7 +526,7 @@
     }
     /* playing:強調漸層 + ⏸(spec line 159)*/
     .recording-row__play--playing {
-      background: linear-gradient(135deg, #f09433, #dc2743);
+      background: var(--bunun-red);
     }
 
     /* ===== Task 4 Step 3:deep link 落點高亮(薑黃 --accent 邊框閃 2 秒、淡出)===== */
@@ -647,7 +647,7 @@
     .share-sheet__btn:active { transform: scale(0.97); }
     /* 開啟 LINE:主要動作、沿用上傳鈕的強調漸層語彙(此 file 既有 pattern、非新寫死色)*/
     .share-sheet__btn--line {
-      background: linear-gradient(135deg, #f09433, #dc2743);
+      background: var(--bunun-red);
       color: #fff;
       border: none;
     }
@@ -799,7 +799,7 @@
       text-align: right; font-size: 12px; color: var(--text-muted);
       margin-top: 4px; font-variant-numeric: tabular-nums;
     }
-    .post-caption__count--over { color: #dc2743; }
+    .post-caption__count--over { color: var(--bunun-red); }
 
     /* footer:分享 */
     .post-modal__footer {
@@ -862,7 +862,7 @@
     }
     .upload-bar--progress { background: var(--accent); }   /* 薑黃 */
     .upload-bar--done     { background: #1a9c4e; }          /* 綠 */
-    .upload-bar--fail     { background: #dc2743; }          /* 紅 */
+    .upload-bar--fail     { background: var(--bunun-red); }          /* 紅 */
     .upload-bar__close {
       background: rgba(255, 255, 255, 0.25); border: none; color: #fff;
       width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
@@ -903,6 +903,7 @@
         <div class="app-header__title-mid" id="headerTitle">成員頁面</div>
         <div class="app-header__spacer"></div>
       </div>
+      <div class="weave-ribbon" aria-hidden="true"></div>
     </header>
 
     <main class="app-main">

@@ -23,6 +23,7 @@
   --bunun-red:    #a83232;   /* 薯榔紅(暗一階莊重紅、非互動紅心)*/
   --bunun-yellow: #d4a017;   /* 薑黃 */
   --bunun-green:  #4a6b3a;   /* 山藍青綠 */
+  --bunun-cream:  #e8dcc4;   /* 織紋帶用的可見米色 */
 
   /* ===== 強調色 ===== */
   --accent:       #d4a017;   /* 薑黃(取代 v1 粉紅 #e85a8a) */
@@ -33,10 +34,8 @@
 
   /* ===== IG 互動色(保留、不要動)===== */
   --like-red:     #ed4956;   /* Instagram 經典愛心紅(按讚用) */
-  /* 限動五色漸層(.story__ring / .post__avatar-ring 用):
-     background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); */
-  /* 強調動作漸層(大麥克風按鈕、底部錄音 nav、上傳按鈕用):
-     background: linear-gradient(135deg, #f09433, #dc2743); */
+  /* v2:限動圈 / 頭像圈 / 強調動作一律改用 --bunun-red(薯榔紅),
+     原 IG 橘粉漸層已全數移除 */
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -104,6 +103,31 @@ img { display: block; max-width: 100%; }
 .icon-btn:active { transform: scale(0.92); }
 .icon-btn svg { width: 24px; height: 24px; }
 
+/* 織紋色帶(布農五色,header 下緣共用) */
+.weave-ribbon {
+  height: 7px; width: 100%;
+  background: linear-gradient(90deg,
+    var(--bunun-red)    0    18%,
+    var(--bunun-cream)  18%  26%,
+    var(--bunun-yellow) 26%  38%,
+    var(--bunun-black)  38%  42%,
+    var(--bunun-red)    42%  58%,
+    var(--bunun-cream)  58%  66%,
+    var(--bunun-yellow) 66%  78%,
+    var(--bunun-green)  78%  84%,
+    var(--bunun-black)  84%  88%,
+    var(--bunun-red)    88%  100%
+  );
+}
+
+/* 首頁左上 logo:山+太陽方塊 + 標題包一層 flex */
+.app-brand { display: inline-flex; align-items: center; gap: 8px; }
+.app-logo {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--bunun-black); color: var(--bunun-white);
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+
 /* ============================================================
    MAIN
    ============================================================ */
@@ -139,7 +163,7 @@ img { display: block; max-width: 100%; }
   width: 68px; height: 68px;
   border-radius: 50%;
   padding: 2.5px;
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  background: var(--bunun-red);
 }
 .story__ring--viewed {
   background: var(--bg-elevated);   /* 看過了 = 灰色 */
@@ -226,7 +250,7 @@ img { display: block; max-width: 100%; }
 .post__avatar-ring {
   padding: 2px;
   border-radius: 50%;
-  background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);
+  background: var(--bunun-red);
 }
 .post__avatar-inner {
   padding: 2px;
@@ -390,7 +414,7 @@ img { display: block; max-width: 100%; }
   position: absolute;
   width: 44px; height: 44px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f09433, #dc2743);
+  background: var(--bunun-red);
   z-index: -1;
   opacity: 0.15;
 }
