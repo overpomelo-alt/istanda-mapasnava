@@ -620,3 +620,33 @@ img { display: block; max-width: 100%; }
   0%, 100% { box-shadow: none; }
   15%, 60% { box-shadow: 0 0 0 3px var(--accent); }
 }
+
+/* ============================================================
+   SPLASH（開場動畫：手繪山描線 + 上弦月 + LUMAH、每 session 播一次）
+   ============================================================ */
+#splash {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 38%, #284E70 0%, #183A57 60%, #0E2236 100%);
+  transition: opacity .55s ease;
+}
+#splash.splash--hide { opacity: 0; pointer-events: none; }
+.splash-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+#splash .splash-svg path { stroke-dasharray: 100; stroke-dashoffset: 100; }
+@keyframes splashDraw { to { stroke-dashoffset: 0; } }
+@keyframes splashWordIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform: translateY(0);} }
+#splash .pMain  { animation: splashDraw .80s ease .10s forwards; }
+#splash .pLeft  { animation: splashDraw .55s ease .65s forwards; }
+#splash .pRight { animation: splashDraw .55s ease .90s forwards; }
+#splash .pFg    { animation: splashDraw .60s ease 1.20s forwards; }
+#splash .pMoon  { animation: splashDraw .50s ease 1.60s forwards; }
+.splash-word {
+  font-family: var(--font-sans);
+  font-size: 22px; font-weight: 500; letter-spacing: 4px;
+  color: #EFE7D6; padding-left: 4px;
+  opacity: 0; animation: splashWordIn .6s ease 2.05s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  #splash .splash-svg path { stroke-dashoffset: 0; animation: none; }
+  .splash-word { opacity: 1; animation: none; }
+}

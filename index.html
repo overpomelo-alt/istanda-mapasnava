@@ -10,6 +10,35 @@
 </head>
 <body>
 
+<div id="splash" aria-hidden="true">
+  <div class="splash-inner">
+    <svg class="splash-svg" width="150" height="120" viewBox="0 0 100 80" fill="none">
+      <defs>
+        <linearGradient id="splashMoon" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F6EEDD"/><stop offset="100%" stop-color="#DDA63A"/></linearGradient>
+        <linearGradient id="splashLine" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="66"><stop offset="0%" stop-color="#CFE6DB"/><stop offset="100%" stop-color="#8CB89A"/></linearGradient>
+      </defs>
+      <path class="pMoon" pathLength="100" d="M60 8 A 10.5 10.5 0 0 1 60 23" stroke="url(#splashMoon)" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+      <path class="pMain" pathLength="100" d="M34 46 Q40 44 46 28 Q52 42 62 48 Q76 56 90 59" stroke="url(#splashLine)" stroke-width="2.2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+      <path class="pLeft" pathLength="100" d="M10 56 Q18 52 26 38 Q30 44 38 45" stroke="url(#splashLine)" stroke-width="1.8" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+      <path class="pRight" pathLength="100" d="M52 47 Q58 44 63 41 Q70 47 80 55" stroke="url(#splashLine)" stroke-width="1.8" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+      <path class="pFg" pathLength="100" d="M14 59 Q30 53 40 57 Q48 61 56 57 Q70 51 86 59" stroke="url(#splashLine)" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="splash-word">LUMAH</div>
+  </div>
+</div>
+<script>
+(function(){
+  var s = document.getElementById('splash');
+  if (!s) return;
+  if (sessionStorage.getItem('istanda_splash_seen')) { s.style.display='none'; return; }
+  sessionStorage.setItem('istanda_splash_seen','1');
+  setTimeout(function(){
+    s.classList.add('splash--hide');
+    setTimeout(function(){ if (s.parentNode) s.parentNode.removeChild(s); }, 650);
+  }, 2700);
+})();
+</script>
+
   <!-- ============ HEADER (頂部標題列) ============ -->
   <header class="app-header">
     <div class="app-header__inner">
