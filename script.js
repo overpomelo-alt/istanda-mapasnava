@@ -340,6 +340,7 @@ function createPostCard(post, membersMap, deviceId) {
     btn: article.querySelector(".post-comment-btn"),
     countEl: article.querySelector(".post-comment-count"),
     db, post,
+    appsScriptUrl: APPS_SCRIPT_URL,   // VC-3a:語音留言上傳
     getIdentity: () => {
       const id = getMyId(); if (!id) return null;
       const me = getMyMember();

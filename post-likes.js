@@ -125,6 +125,7 @@ function ensureSheet() {
   el.querySelector("#pcsRecBtn").addEventListener("click", onRecBtn);
   el.querySelector("#pcsRecPlay").addEventListener("click", onRecPlay);
   el.querySelector("#pcsRecReset").addEventListener("click", vcReset);
+  el.querySelector("#pcsAudioSubmit").addEventListener("click", onAudioSubmit);
   _sheet = el;
   return el;
 }
@@ -350,8 +351,111 @@ async function onSubmit() {
   }
 }
 
+/* ============================================================
+   VC-3a:語音留言上傳機制(精簡複製自 member.html 照片那套 POST blind + 差集 claim）
+   TODO(上線後):與 member.html 的 postBlobToAppsScript / claimNewFileId / seedExistingFileIds
+   合併成單一共用工具,目前為求不動 member.html 而複製一份(規則 11)。
+   資料夾策略 ②:存留言者自己的子資料夾 —— folderId 空走後端保底、list 用 data.result[memberId]。
+   ============================================================ */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(String(r.result).split(",")[1] || ""); // 剝 data: 前綴回純 base64
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+async function vcUploadBlob(appsScriptUrl, blob, filename, memberId) {
+  // POST blind:跨域 redirect 拿不到 response、不解析;fileId 靠下面差集 list 撈
+  const base64 = await blobToBase64(blob);
+  // 差集 pre-seed:先記住資料夾現有 fileId、避免誤抓舊檔(保底路徑用 memberId 撈)
+  const claimed = [];
+  async function listFiles() {
+    const resp = await fetch(`${appsScriptUrl}?action=list`);
+    const data = await resp.json();
+    return (data && data.result && data.result[memberId]) || [];
+  }
+  try { (await listFiles()).forEach(f => { if (f.fileId) claimed.push(f.fileId); }); }
+  catch (e) { console.warn("[vc] pre-seed list 失敗、claimed 從空開始", e && e.message ? e.message : e); }
+
+  await fetch(appsScriptUrl, {
+    method: "POST",
+    body: JSON.stringify({ audio: base64, filename, memberId, memberName: "", folderId: "" })
+  });
+
+  // 差集 claim:retry 3 次、找第一筆不在 claimed 的新 fileId
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let files = [];
+    try { files = await listFiles(); }
+    catch (e) { console.warn("[vc] claim GET 失敗、retry " + attempt, e && e.message ? e.message : e); }
+    const fresh = files.find(f => f.fileId && !claimed.includes(f.fileId));
+    if (fresh) return { fileId: fresh.fileId, filename: fresh.filename };
+    if (attempt < 3) await new Promise(r => setTimeout(r, 500));
+  }
+  throw new Error("CLAIM_FAILED");
+}
+
+async function onAudioSubmit() {
+  const opts = _state;
+  if (!opts) return;
+  const submit = _sheet.querySelector("#pcsAudioSubmit");
+
+  // 防呆(雙保險):沒錄音不送
+  if (!_vcBlob) {
+    if (typeof opts.showToast === "function") opts.showToast("還沒錄音喔");
+    return;
+  }
+
+  // 身分:沒選過「我是誰」→ 關 sheet、選身分、選完重開(語音不帶草稿、錄音狀態會清掉)
+  const ident = opts.getIdentity();
+  if (!ident) {
+    const carry = opts;
+    closeSheet();
+    carry.ensureIdentity(() => openPostCommentSheet(Object.assign({}, carry)));
+    return;
+  }
+
+  if (!opts.appsScriptUrl) {
+    if (typeof opts.showToast === "function") opts.showToast("上傳設定缺失、請重整");
+    return;
+  }
+
+  const blob = _vcBlob, ext = _vcExt, duration = _vcDuration;
+  const filename = `cmt_${opts.post.id}_${Date.now()}.${ext}`;
+  submit.disabled = true;
+  const orig = submit.textContent;
+  submit.textContent = "傳送中…";
+  try {
+    const up = await vcUploadBlob(opts.appsScriptUrl, blob, filename, ident.memberId);
+    const comment = {
+      deviceId: getDeviceId(),
+      memberId: ident.memberId,
+      authorName: ident.authorName,
+      createdAt: new Date(),            // ⚠️ 不可 serverTimestamp(陣列元素)
+      type: "audio",
+      audioFileId: up.fileId,
+      audioFilename: up.filename || filename,
+      durationSec: duration
+    };
+    await addPostComment(opts.db, opts.post.id, comment);
+    opts.comments.push(comment);        // 樂觀顯示(VC-1 的 ▶ 語音 鈕會出現)
+    renderCommentList(opts.comments);
+    if (typeof opts.onAdded === "function") opts.onAdded(comment);
+    vcReset();
+    setMode("text");                    // 送完回打字模式
+  } catch (err) {
+    console.warn("[vc] 語音留言送出失敗:", err && err.message ? err.message : err);
+    if (typeof opts.showToast === "function") opts.showToast("語音留言送出失敗、請再試");
+    // 失敗:保留錄音讓他重送(規則 4)
+  } finally {
+    submit.textContent = orig;
+    submit.disabled = false;
+  }
+}
+
 /* 把一顆 💬 按鈕接上:顯示留言數 + 點擊開 sheet。
-   opts = { btn, countEl, db, post, getIdentity, ensureIdentity, showToast } */
+   opts = { btn, countEl, db, post, appsScriptUrl, getIdentity, ensureIdentity, showToast } */
 export function wireCommentButton(opts) {
   const { btn, countEl, post } = opts;
   if (!btn) return;
@@ -359,6 +463,7 @@ export function wireCommentButton(opts) {
   btn.addEventListener("click", () => {
     openPostCommentSheet({
       db: opts.db, post,
+      appsScriptUrl: opts.appsScriptUrl,   // VC-3a:語音留言上傳用
       getIdentity: opts.getIdentity,
       ensureIdentity: opts.ensureIdentity,
       showToast: opts.showToast,
