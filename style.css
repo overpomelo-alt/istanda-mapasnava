@@ -125,7 +125,7 @@ img { display: block; max-width: 100%; }
 .app-logo {
   width: 40px; height: 40px;
   border-radius: 9px;
-  background: radial-gradient(circle at 50% 40%, #2F5B82 0%, #1F4360 65%, #142B40 100%);
+  background: radial-gradient(circle at 50% 40%, #284E70 0%, #183A57 65%, #0E2236 100%);
   display: inline-flex; align-items: center; justify-content: center;
   flex: none;
 }
