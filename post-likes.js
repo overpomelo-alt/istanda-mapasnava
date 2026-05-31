@@ -7,7 +7,7 @@
    身分(我是誰)由各頁透過 callback 提供(getIdentity / ensureIdentity)、本模組不綁特定頁。
    ============================================================ */
 import {
-  doc, updateDoc, arrayUnion, arrayRemove
+  doc, getDoc, updateDoc, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 function esc(s) {
@@ -366,22 +366,29 @@ function blobToBase64(blob) {
   });
 }
 
-async function vcUploadBlob(appsScriptUrl, blob, filename, memberId) {
-  // POST blind:跨域 redirect 拿不到 response、不解析;fileId 靠下面差集 list 撈
+async function vcUploadBlob(appsScriptUrl, blob, filename, memberId, memberName, driveFolderId) {
+  // POST blind:跨域 redirect 拿不到 response、不解析;fileId 靠下面差集 list 撈。
+  // 有 driveFolderId → 主路徑(回扁平 files、差集只看 fileId、跟照片同一條);
+  // 無 → 保底路徑(回 result[memberId]、靠檔名前綴=memberId 分組,招式 1 保證撈得到)。
   const base64 = await blobToBase64(blob);
-  // 差集 pre-seed:先記住資料夾現有 fileId、避免誤抓舊檔(保底路徑用 memberId 撈)
   const claimed = [];
   async function listFiles() {
+    if (driveFolderId) {
+      const resp = await fetch(`${appsScriptUrl}?action=list&folderId=${encodeURIComponent(driveFolderId)}`);
+      const data = await resp.json();
+      return (data && data.files) || [];
+    }
     const resp = await fetch(`${appsScriptUrl}?action=list`);
     const data = await resp.json();
     return (data && data.result && data.result[memberId]) || [];
   }
+  // 差集 pre-seed:先記住資料夾現有 fileId、避免誤抓舊檔
   try { (await listFiles()).forEach(f => { if (f.fileId) claimed.push(f.fileId); }); }
   catch (e) { console.warn("[vc] pre-seed list 失敗、claimed 從空開始", e && e.message ? e.message : e); }
 
   await fetch(appsScriptUrl, {
     method: "POST",
-    body: JSON.stringify({ audio: base64, filename, memberId, memberName: "", folderId: "" })
+    body: JSON.stringify({ audio: base64, filename, memberId, memberName: memberName || "", folderId: driveFolderId || "" })
   });
 
   // 差集 claim:retry 3 次、找第一筆不在 claimed 的新 fileId
@@ -422,12 +429,21 @@ async function onAudioSubmit() {
   }
 
   const blob = _vcBlob, ext = _vcExt, duration = _vcDuration;
-  const filename = `cmt_${opts.post.id}_${Date.now()}.${ext}`;
+  // 招式 1:檔名前綴 = memberId(保底路徑 split('_')[0] 才會歸到 result[memberId])
+  const filename = `${ident.memberId}_cmt_${Date.now()}.${ext}`;
   submit.disabled = true;
   const orig = submit.textContent;
   submit.textContent = "傳送中…";
   try {
-    const up = await vcUploadBlob(opts.appsScriptUrl, blob, filename, ident.memberId);
+    // 招式 2:讀留言者自己的 driveFolderId、有值就走主路徑(跟照片同一條成功路徑)
+    let driveFolderId = "";
+    try {
+      const mSnap = await getDoc(doc(opts.db, "members", ident.memberId));
+      if (mSnap.exists()) driveFolderId = mSnap.data().driveFolderId || "";
+    } catch (e) {
+      console.warn("[vc] 讀 driveFolderId 失敗、退保底路徑", e && e.message ? e.message : e);
+    }
+    const up = await vcUploadBlob(opts.appsScriptUrl, blob, filename, ident.memberId, ident.authorName, driveFolderId);
     const comment = {
       deviceId: getDeviceId(),
       memberId: ident.memberId,
