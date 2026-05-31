@@ -118,9 +118,9 @@ function ensureSheet() {
       </div>
     </div>`;
   document.body.appendChild(el);
-  el.querySelectorAll("[data-pcs-close]").forEach(b => b.addEventListener("click", closeSheet));
+  el.querySelectorAll("[data-pcs-close]").forEach(b => b.addEventListener("click", onCloseClick));
   el.querySelector("#pcsSubmit").addEventListener("click", onSubmit);
-  el.querySelector("#pcsModeText").addEventListener("click", () => setMode("text"));
+  el.querySelector("#pcsModeText").addEventListener("click", onModeTextClick);
   el.querySelector("#pcsModeAudio").addEventListener("click", () => setMode("audio"));
   el.querySelector("#pcsRecBtn").addEventListener("click", onRecBtn);
   el.querySelector("#pcsRecPlay").addEventListener("click", onRecPlay);
@@ -151,6 +151,24 @@ function vcPickMime() {
   if (MediaRecorder.isTypeSupported("audio/webm")) return { mime: "audio/webm", ext: "webm" };
   if (MediaRecorder.isTypeSupported("audio/mp4"))  return { mime: "audio/mp4", ext: "mp4" };
   return null;
+}
+
+// 有「錄好但還沒送出」的語音?(錄音進行中 _vcBlob 還沒生成 → false、不算)
+function vcHasUnsent() {
+  return !!_vcBlob && !(_vcRecorder && _vcRecorder.state === "recording");
+}
+const VC_DISCARD_MSG = "錄好的語音還沒送出,切到打字會清掉,確定嗎?";
+
+// 使用者主動關視窗(X / 背景):有未送出語音先確認(內部 closeSheet 不經這層、不誤觸)
+function onCloseClick() {
+  if (vcHasUnsent() && !confirm(VC_DISCARD_MSG)) return;
+  closeSheet();
+}
+
+// 使用者點「打字」分頁:有未送出語音先確認(送出後自動切回時 _vcBlob 已清、不會誤觸)
+function onModeTextClick() {
+  if (vcHasUnsent() && !confirm(VC_DISCARD_MSG)) return;
+  setMode("text");
 }
 
 function setMode(mode) {
