@@ -2164,7 +2164,14 @@
           where("fileId", "==", fileId)
         );
         const snap = await getDocs(q);
-        if (snap.empty) throw new Error("找不到對應 recordings 文件");
+        if (snap.empty) {
+          // 孤兒檔(Drive 有檔、Firestore 沒對應 recordings 文件):溫和提示 + 乾淨 rollback、不 throw(規則 4)
+          row.comments = prevComments;
+          updateRowComments(fileId, row.comments);
+          commentInput.value = text;
+          showToast("這段還不能留言", 2500);
+          return;
+        }
         const docRef = snap.docs[0].ref;
         await updateDoc(docRef, { comments: arrayUnion(newComment) });
         // 成功:onSnapshot 推送 server 端 comments、updateRowComments re-render
