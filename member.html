@@ -3200,8 +3200,7 @@
               const cards = listEl.querySelectorAll(".post");
               if (change.newIndex >= cards.length) listEl.appendChild(card);
               else listEl.insertBefore(card, cards[change.newIndex]);
-              const ph = card.querySelector("img[data-photo-fileid]");
-              if (ph) photoIO.observe(ph);   // 只有新卡才抓照片
+              card.querySelectorAll("img[data-photo-fileid]").forEach(ph => photoIO.observe(ph));   // 只有新卡才抓照片(每張 slide)
             } else if (change.type === "modified") {
               const card = listEl.querySelector(`.post[data-post-id="${post.id}"]`);
               if (card) updateMemberPostStats(card, post, deviceId);   // 就地、不重建、不碰照片
@@ -3278,8 +3277,8 @@
           const empty = listEl.querySelector(".recordings-empty");
           if (empty) empty.remove();
           listEl.insertBefore(card, listEl.firstChild);
-          const ph = card.querySelector("img[data-photo-fileid]");
-          if (ph) loadMemberPostPhoto(ph);
+          // 單獨抓的卡片沒掛 observer、直接載(多張 slide 全載、單一卡片可接受)
+          card.querySelectorAll("img[data-photo-fileid]").forEach(ph => loadMemberPostPhoto(ph));
         } catch (err) {
           console.warn("[member posts] 深連結載入失敗:", err && err.message ? err.message : err);
           showToast("這篇貼文找不到了"); clearDeepLinkPostId(); return;
@@ -3307,8 +3306,7 @@
       posts.forEach(p => {
         const card = createMemberPostCard(p, deviceId);
         listEl.appendChild(card);
-        const ph = card.querySelector("img[data-photo-fileid]");
-        if (ph) io.observe(ph);
+        card.querySelectorAll("img[data-photo-fileid]").forEach(ph => io.observe(ph));
       });
     }
 
@@ -3321,10 +3319,12 @@
       const authorName = (memberData && (memberData.name || memberData.nickname)) || "家人";
       const authorInitials = (memberData && memberData.initials) || "??";
       const photos = Array.isArray(post.photos) ? post.photos : [];
-      const first = photos[0];
-      const mediaHtml = first
-        ? `<img data-photo-fileid="${escapeHtml(first.fileId)}" alt="${escapeHtml(authorName)} 的照片" />
-           ${photos.length > 1 ? `<span style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>` : ""}`
+      // 照片輪播:橫向 scroll-snap、每張一個 slide(CSS 共用 style.css 的 .post__carousel/.post__slide)
+      const mediaHtml = photos.length > 0
+        ? `<div class="post__carousel">
+             ${photos.map(p => `<div class="post__slide"><img data-photo-fileid="${escapeHtml(p.fileId)}" alt="${escapeHtml(authorName)} 的照片" /></div>`).join("")}
+           </div>
+           ${photos.length > 1 ? `<span class="post__photo-count" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>` : ""}`
         : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;">(這篇沒有照片)</div>`;
       article.innerHTML = `
         <header class="post__header">
@@ -3348,6 +3348,18 @@
           <p class="post__time">${formatCommentTime(post.createdAt)}</p>
         </div>
       `;
+      // 照片輪播:橫滑時更新「目前/總數」角標(多張才有)
+      if (photos.length > 1) {
+        const carousel = article.querySelector(".post__carousel");
+        const countEl = article.querySelector(".post__photo-count");
+        if (carousel && countEl) {
+          carousel.addEventListener("scroll", () => {
+            const idx = Math.round(carousel.scrollLeft / carousel.clientWidth);
+            countEl.textContent = `${Math.min(photos.length, idx + 1)}/${photos.length}`;
+          }, { passive: true });
+        }
+      }
+
       // ❤️ 接共用 wireLikeButton(樂觀更新 + 寫失敗還原、規則 4)
       wireLikeButton({
         btn: article.querySelector(".post-like-btn"),
