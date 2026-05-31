@@ -319,7 +319,7 @@ async function onVoiceClick(btn) {
     return;
   }
   if (!btn.dataset.label) btn.dataset.label = btn.textContent;   // 記原始「▶ 語音 0:0x」
-  btn.textContent = "載入中…";
+  btn.innerHTML = `<span class="app-spinner"></span>`;
   btn.disabled = true;
   try {
     const resp = await fetch(`${opts.appsScriptUrl}?id=${encodeURIComponent(fileId)}`);
@@ -520,7 +520,7 @@ async function onAudioSubmit() {
   const filename = `${ident.memberId}_cmt_${Date.now()}.${ext}`;
   submit.disabled = true;
   const orig = submit.textContent;
-  submit.textContent = "傳送中…";
+  submit.innerHTML = `<span class="app-spinner"></span>`;
   try {
     // 招式 2:讀留言者自己的 driveFolderId、有值就走主路徑(跟照片同一條成功路徑)
     let driveFolderId = "";

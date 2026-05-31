@@ -629,6 +629,20 @@ img { display: block; max-width: 100%; }
 .pcs__input { flex: 1; font-family: var(--font-sans); font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 18px; padding: 8px 14px; resize: none; outline: none; max-height: 96px; line-height: 1.4; }
 .pcs__submit { flex-shrink: 0; font-size: 14px; font-weight: 600; color: var(--bg-elevated); background: var(--text); border: none; border-radius: 18px; padding: 8px 18px; cursor: pointer; }
 .pcs__submit:disabled { opacity: 0.4; cursor: not-allowed; }
+/* 共用小轉圈 spinner(語音留言「傳送中」「載入中」共用、可 inline 放按鈕內) */
+.app-spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid rgba(0,0,0,0.15);
+  border-top-color: var(--bunun-red);
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: app-spin 0.7s linear infinite;
+}
+@keyframes app-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .app-spinner { animation: none; }
+}
 /* VC-2:打字｜錄音 切換 + 留言錄音 UI */
 .pcs__modetabs { display: flex; gap: 8px; padding: 8px 16px 0; }
 .pcs__modetab { flex: 1; font-size: 14px; font-weight: 600; color: var(--text-muted); background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 7px 0; cursor: pointer; }
