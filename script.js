@@ -11,7 +11,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
 import {
-  getFirestore, collection, getDocs, doc, getDoc, query, orderBy
+  getFirestore, collection, getDocs, doc, getDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js";   // 貼文互動共用(規則 2)
 
@@ -356,6 +356,96 @@ function createPostCard(post, membersMap, deviceId) {
   return article;
 }
 
+/* ============================================================
+   VC-4:首頁 feed 即時化(onSnapshot + docChanges 精準更新)
+   - added:插新卡(只有這時抓那張照片);第一次 snapshot 全當 added → build 初始 feed
+   - modified:就地只更新 讚數/留言數/愛心,用 snapshot 絕對值(冪等、跟樂觀更新共存)
+   - removed:移除那張卡
+   絕不整頁重畫、modified 絕不重抓照片(照片代理很貴)。
+   ============================================================ */
+const FEED_EMPTY_HTML = `
+  <div class="feed-loading">
+    還沒有家族貼文 🌿<br/>
+    <span style="font-size:12px; color:var(--text-muted); margin-top:8px; display:inline-block;">
+      進到自己的頁面、按「📷 發貼文」、分享第一篇給家人
+    </span>
+  </div>`;
+
+let _feedUnsub = null;
+
+function setupFeedListener(membersMap) {
+  const section = document.getElementById("feedSection");
+  const deviceId = getDeviceId();
+  // 照片 lazy-load:整個 feed 共用一個 observer(只有 added 的卡才 observe → 才會抓照片)
+  const photoObserver = new IntersectionObserver((entries, obs) => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      obs.unobserve(en.target);
+      loadCardPhoto(en.target);
+    });
+  }, { rootMargin: "300px" });
+
+  let first = true;
+  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+  if (_feedUnsub) { _feedUnsub(); _feedUnsub = null; }
+
+  _feedUnsub = onSnapshot(q, (snap) => {
+    // 清掉「載入家族記事中…」或上一輪的空狀態佔位(都是 .feed-loading)
+    const placeholder = section.querySelector(".feed-loading");
+    if (placeholder) placeholder.remove();
+
+    snap.docChanges().forEach(change => {
+      const post = { id: change.doc.id, ...change.doc.data() };
+      if (change.type === "added") {
+        const card = createPostCard(post, membersMap, deviceId);
+        const cards = section.querySelectorAll(".post");
+        if (change.newIndex >= cards.length) section.appendChild(card);
+        else section.insertBefore(card, cards[change.newIndex]);
+        const ph = card.querySelector("img[data-photo-fileid]");
+        if (ph) photoObserver.observe(ph);   // 只有新卡才抓照片
+      } else if (change.type === "modified") {
+        const card = section.querySelector(`.post[data-post-id="${post.id}"]`);
+        if (card) updatePostCardStats(card, post, deviceId);   // 就地、不重建、不碰照片
+      } else if (change.type === "removed") {
+        const card = section.querySelector(`.post[data-post-id="${post.id}"]`);
+        if (card) card.remove();
+      }
+    });
+
+    // 0 筆 → 空狀態;有貼文則上面已清掉佔位
+    if (section.querySelectorAll(".post").length === 0) {
+      section.innerHTML = FEED_EMPTY_HTML;
+    }
+
+    if (first) {
+      first = false;
+      handlePostDeepLink(membersMap);   // 初始 build 完才處理 ?post= 深連結
+    }
+  }, (err) => {
+    console.warn("[feed] onSnapshot 失敗:", err && err.message ? err.message : err);
+    if (section.querySelectorAll(".post").length === 0) section.innerHTML = FEED_EMPTY_HTML;
+    showToast("動態載入失敗、請檢查網路");
+  });
+}
+
+/* modified 就地更新:讚數/留言數一律用 snapshot 的「絕對值」(likes.length / comments.length),
+   不累加 → 不管樂觀更新做了什麼、或重複收到 snapshot 都會校正成正確值、不會變兩倍也不會閃。
+   愛心:依 likes 陣列有沒有「我的 deviceId」重算實心/空心(與 wireLikeButton 同口徑)。 */
+function updatePostCardStats(card, post, deviceId) {
+  const likes = Array.isArray(post.likes) ? post.likes : [];
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+  const likeCount = card.querySelector(".post-like-count");
+  const commentCount = card.querySelector(".post-comment-count");
+  const likeBtn = card.querySelector(".post-like-btn");
+  if (likeCount) likeCount.textContent = String(likes.length);
+  if (commentCount) commentCount.textContent = String(comments.length);
+  if (likeBtn) {
+    const liked = likes.includes(deviceId);
+    likeBtn.textContent = liked ? "❤️" : "🤍";
+    likeBtn.setAttribute("aria-pressed", liked ? "true" : "false");
+  }
+}
+
 /* 深連結:?post={postId} → 開那篇。在初次 feed 裡 → scroll + 高亮;
    不在 → getDoc 單獨抓、prepend 到最上;找不到 → toast(規則 4:不整頁壞)。 */
 async function handlePostDeepLink(membersMap) {
@@ -463,19 +553,7 @@ async function main() {
     // 抓貼文(Task 5 2b-5:posts 已是真實貼文來源、發貼文 modal 寫入)
     // 作者用 memberId join members、先把 members 做成 map、不每張卡片各查(規則 3)
     const membersMap = new Map(allMembers.map(m => [m.id, m]));
-    try {
-      const postsSnap = await getDocs(
-        query(collection(db, "posts"), orderBy("createdAt", "desc"))
-      );
-      const posts = postsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderFeed(posts, membersMap);
-      handlePostDeepLink(membersMap);   // 若網址有 ?post= → scroll 到那篇 / 單獨抓
-    } catch (err) {
-      // posts collection 還沒資料 / 讀取失敗 → 空狀態(規則 4)
-      console.warn("posts 讀取失敗或尚無資料:", err && err.message ? err.message : err);
-      renderFeed([]);
-      handlePostDeepLink(membersMap);   // 仍試單篇 getDoc(list 失敗但單篇可能在)
-    }
+    setupFeedListener(membersMap);   // VC-4:onSnapshot 即時化(取代一次性 getDocs)
 
   } catch (err) {
     console.error("Firestore 讀取失敗:", err);
