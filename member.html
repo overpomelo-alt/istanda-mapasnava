@@ -1736,6 +1736,10 @@
     let currentPlayingBtn = null;
     let currentPlayingFileId = null;
     let pausedFileId = null;   // B(b版):暫停中的 fileId、獨立旗標、只在最上面攔截續播、不碰全新播放路徑
+    let recordingsObjUrl = null;   // 3rd 修:播放用 objectURL(取代 data URI、修大檔 NotSupportedError;規則5 釋放)
+    function revokeRecordingsObjUrl() {
+      if (recordingsObjUrl) { URL.revokeObjectURL(recordingsObjUrl); recordingsObjUrl = null; }
+    }
     let playLoadingTimer = null;
 
     function pickMimeFromFilename(filename) {
@@ -1786,12 +1790,13 @@
       // 全新播放 / 切別筆:放棄任何暫停態(回到 4495cb2 的正確流程)
       pausedFileId = null;
 
-      // 點別筆 → 把當前播放的停掉、按鈕回 idle
+      // 點別筆 → 把當前播放的停掉、按鈕回 idle、釋放舊 objectURL
       if (currentPlayingBtn && currentPlayingBtn !== btn) {
         setPlayBtnState(currentPlayingBtn, "idle");
         recordingsAudio.pause();
         recordingsAudio.removeAttribute("src");
         recordingsAudio.load();
+        revokeRecordingsObjUrl();
       }
 
       // 進 loading
@@ -1816,13 +1821,20 @@
         if (currentPlayingFileId !== fileId) return;
 
         const mime = pickMimeFromFilename(filename);
-        recordingsAudio.src = `data:${mime};base64,${base64}`;
+        // 3rd 修:base64 → Blob → objectURL(取代 data URI、避免大檔 NotSupportedError;同語音留言那招)
+        const bin = atob(base64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        revokeRecordingsObjUrl();   // 釋放上一個(若有)
+        recordingsObjUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        recordingsAudio.src = recordingsObjUrl;
         await recordingsAudio.play();
         setPlayBtnState(btn, "playing");
       } catch (err) {
         console.error("playRecording 失敗:", err);
         showToast("⚠ 播放失敗、請重試", 2800);
         setPlayBtnState(btn, "idle");
+        revokeRecordingsObjUrl();   // 失敗也釋放、不漏
         if (currentPlayingFileId === fileId) {
           currentPlayingBtn = null;
           currentPlayingFileId = null;
@@ -1832,6 +1844,7 @@
 
     recordingsAudio.addEventListener("ended", () => {
       pausedFileId = null;   // 播完 → 下次播該筆從頭(重 fetch)
+      revokeRecordingsObjUrl();   // 播完釋放(下次重 fetch 建新的)
       if (currentPlayingBtn) {
         setPlayBtnState(currentPlayingBtn, "idle");
         currentPlayingBtn = null;
