@@ -463,25 +463,11 @@ function blobToBase64(blob) {
   });
 }
 
-/* 共用:XHR blind POST + 真實上傳進度(規則 3,日後主錄音真實化可複用)。
-   blind 語意:跨域 redirect 到 googleusercontent 拿不到 response、不解析、不看狀態碼;
-   不論 load / error / redirect 都 resolve(loadend),由後續 GET list 差集 claim 當唯一真相。
-   onProgress(pct 0~100):upload.onprogress 真實 bytes(base64 後大小、放大 ~33% 仍合理)。 */
-function xhrPostBlind(url, bodyString, onProgress) {
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    if (xhr.upload && typeof onProgress === "function") {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-      };
-    }
-    xhr.onloadend = () => resolve();   // blind:成敗都交給 claim 驗證(避免 CORS redirect 誤判失敗)
-    try { xhr.send(bodyString); } catch (e) { resolve(); }
-  });
-}
-
-async function vcUploadBlob(appsScriptUrl, blob, filename, memberId, memberName, driveFolderId, onProgress, onClaim) {
+/* ⚠️ 上傳只能用 fetch「簡單請求」blind POST、不能用 XHR upload.onprogress:
+   掛上傳進度監聽器會讓請求變「非簡單請求」→ 觸發 CORS preflight(OPTIONS)→
+   Apps Script 不支援 preflight、回不了 Access-Control-Allow-Origin → 上傳被擋。
+   屬架構限制(非 bug),所以拿不到真實 %、用 spinner。 */
+async function vcUploadBlob(appsScriptUrl, blob, filename, memberId, memberName, driveFolderId) {
   // POST blind:跨域 redirect 拿不到 response、不解析;fileId 靠下面差集 list 撈。
   // 有 driveFolderId → 主路徑(回扁平 files、差集只看 fileId、跟照片同一條);
   // 無 → 保底路徑(回 result[memberId]、靠檔名前綴=memberId 分組,招式 1 保證撈得到)。
@@ -501,14 +487,10 @@ async function vcUploadBlob(appsScriptUrl, blob, filename, memberId, memberName,
   try { (await listFiles()).forEach(f => { if (f.fileId) claimed.push(f.fileId); }); }
   catch (e) { console.warn("[vc] pre-seed list 失敗、claimed 從空開始", e && e.message ? e.message : e); }
 
-  // 真實上傳進度(XHR);blind POST、不解析 response
-  await xhrPostBlind(
-    appsScriptUrl,
-    JSON.stringify({ audio: base64, filename, memberId, memberName: memberName || "", folderId: driveFolderId || "" }),
-    onProgress
-  );
-
-  if (typeof onClaim === "function") onClaim();   // 進入「確認中…」階段(沒有進度)
+  await fetch(appsScriptUrl, {
+    method: "POST",
+    body: JSON.stringify({ audio: base64, filename, memberId, memberName: memberName || "", folderId: driveFolderId || "" })
+  });
 
   // 差集 claim:retry 3 次、找第一筆不在 claimed 的新 fileId
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -552,7 +534,7 @@ async function onAudioSubmit() {
   const filename = `${ident.memberId}_cmt_${Date.now()}.${ext}`;
   submit.disabled = true;
   const orig = submit.textContent;
-  submit.textContent = "上傳 0%";
+  submit.innerHTML = `<span class="app-spinner"></span>`;
   try {
     // 招式 2:讀留言者自己的 driveFolderId、有值就走主路徑(跟照片同一條成功路徑)
     let driveFolderId = "";
@@ -562,11 +544,7 @@ async function onAudioSubmit() {
     } catch (e) {
       console.warn("[vc] 讀 driveFolderId 失敗、退保底路徑", e && e.message ? e.message : e);
     }
-    const up = await vcUploadBlob(
-      opts.appsScriptUrl, blob, filename, ident.memberId, ident.authorName, driveFolderId,
-      (pct) => { submit.textContent = `上傳 ${pct}%`; },   // 真實上傳 %
-      () => { submit.textContent = "確認中…"; }              // claim 階段(無進度)
-    );
+    const up = await vcUploadBlob(opts.appsScriptUrl, blob, filename, ident.memberId, ident.authorName, driveFolderId);
     const comment = {
       deviceId: getDeviceId(),
       memberId: ident.memberId,
