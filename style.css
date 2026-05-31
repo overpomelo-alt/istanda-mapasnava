@@ -66,6 +66,9 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 img { display: block; max-width: 100%; }
+/* 視覺隱藏但仍在排版、可被 .click() 觸發(file input 用;嚴禁 display:none / visibility:hidden,
+   部分手機對它們呼叫 .click() 不開選擇器) */
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ============================================================
    HEADER · 頂部標題列

@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
   <style>
     /* ============================================================
        MEMBER PAGE · Hero / 錄音區 placeholder / 清單 placeholder
@@ -1085,9 +1085,9 @@
           <!-- 已選預覽列:2b-2 起 render 縮圖(每張右上 [×])、滿 9 張隱藏加照片入口 -->
           <div class="post-photos__strip" id="postPhotosStrip" hidden></div>
           <!-- 拍照用 hidden input(capture=現拍、永遠本機、不踩 proxy)-->
-          <input type="file" accept="image/*" capture="environment" id="postCameraInput" hidden>
+          <input type="file" accept="image/*" capture="environment" id="postCameraInput" class="visually-hidden">
           <!-- 相簿用 hidden input(multiple、可能踩 Android Photo Picker proxy、每張過守門)-->
-          <input type="file" accept="image/*" multiple id="postGalleryInput" hidden>
+          <input type="file" accept="image/*" multiple id="postGalleryInput" class="visually-hidden">
         </div>
 
         <!-- 2. caption -->
@@ -1140,7 +1140,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=6";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=7";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
