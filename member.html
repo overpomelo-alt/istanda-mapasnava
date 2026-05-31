@@ -1652,7 +1652,10 @@
         const data = await resp.json();
         // Task 5 Step 1:保底 list 新 schema 是 { ok, mode:'fallback', result:{ memberId:[...] } }、
         // 舊 schema 是扁平 { memberId:[...] };兩者都吃、過渡期相容(只改解析、render 不動)
-        const items = (data.result && data.result[memberId]) || data[memberId] || [];
+        let items = (data.result && data.result[memberId]) || data[memberId] || [];
+        // VC-3a 修:語音留言檔名為 {memberId}_cmt_…、被後端保底 list 混進此清單;
+        // 它們不是「錄音」、也沒有 recordings 文件 → 濾掉(同時修正「N 則錄音」灌水)
+        items = items.filter(it => !((it.filename || "").includes("_cmt_")));
         // 排序同子步 3c.2:filename desc(時間戳大=新)、tiebreak fileId desc(共用 sortByNewest)
         sortByNewest(items);
         allRecordings = items;
@@ -1854,7 +1857,14 @@
       try {
         // 撈該文件 docId(子步 3a 用 query+getDocs、Task 5 之後 onSnapshot 會 cache docId 在 row 上避免重查)
         const snap = await getDocs(q);
-        if (snap.empty) throw new Error("找不到對應 recordings 文件");
+        if (snap.empty) {
+          // 孤兒檔(Drive 有檔、Firestore 沒對應 recordings 文件、例如上傳時 addDoc 失敗):
+          // 不 throw 嚇人的錯,溫和提示 + 乾淨 rollback(規則 4)
+          row.likes = currentLikes;
+          updateRowLikes(fileId, currentLikes);
+          showToast("這段還不能按讚", 2500);
+          return;
+        }
         const docRef = snap.docs[0].ref;
         await updateDoc(docRef, {
           likes: wasLiked ? arrayRemove(myDeviceId) : arrayUnion(myDeviceId)
