@@ -126,6 +126,11 @@ function ensureSheet() {
   el.querySelector("#pcsRecPlay").addEventListener("click", onRecPlay);
   el.querySelector("#pcsRecReset").addEventListener("click", vcReset);
   el.querySelector("#pcsAudioSubmit").addEventListener("click", onAudioSubmit);
+  // VC-3b:留言列表的 ▶ 語音 用事件委派(列表會重畫、按鈕每次重建)
+  el.querySelector("#pcsList").addEventListener("click", (e) => {
+    const vb = e.target.closest(".pcs__voice");
+    if (vb) onVoiceClick(vb);
+  });
   _sheet = el;
   return el;
 }
@@ -278,8 +283,72 @@ function vcReset() {
   }
 }
 
+/* ============================================================
+   VC-3b:語音留言播放(精簡複製 member.html playRecording 的 ?id= proxy 解法）
+   TODO(上線後):與 member.html 的 playRecording 合併成單一共用播放器。
+   ============================================================ */
+let _vcPlayAudio = null;   // 當前播放的 Audio
+let _vcPlayBtn   = null;   // 當前播放對應的 ▶ 按鈕
+let _vcPlayUrl   = null;   // 播放用 objectURL(規則 5:停止/播完/切換都 revoke)
+
+function vcMimeFromName(filename) {
+  const ext = (filename.split(".").pop() || "").toLowerCase();
+  if (ext === "mp4" || ext === "m4a") return "audio/mp4";
+  if (ext === "mp3") return "audio/mp3";
+  return "audio/webm";
+}
+
+function vcStopPlayback() {
+  if (_vcPlayAudio) { try { _vcPlayAudio.pause(); } catch (e) {} }
+  if (_vcPlayUrl) { URL.revokeObjectURL(_vcPlayUrl); _vcPlayUrl = null; }
+  if (_vcPlayBtn) { _vcPlayBtn.textContent = _vcPlayBtn.dataset.label || "▶ 語音"; _vcPlayBtn.disabled = false; }
+  _vcPlayAudio = null; _vcPlayBtn = null;
+}
+
+async function onVoiceClick(btn) {
+  // 同一顆正在播 → 停(toggle）
+  if (_vcPlayBtn === btn && _vcPlayAudio) { vcStopPlayback(); return; }
+  // 別顆在播 → 先停 A、復原 A 按鈕(一次只播一個）
+  if (_vcPlayAudio) vcStopPlayback();
+
+  const opts = _state;
+  const fileId = btn.dataset.fileid;
+  const filename = btn.dataset.filename || "";
+  if (!fileId || !opts || !opts.appsScriptUrl) {
+    if (opts && typeof opts.showToast === "function") opts.showToast("語音載入失敗");
+    return;
+  }
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;   // 記原始「▶ 語音 0:0x」
+  btn.textContent = "載入中…";
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${opts.appsScriptUrl}?id=${encodeURIComponent(fileId)}`);
+    const base64 = await resp.text();
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: vcMimeFromName(filename) });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => vcStopPlayback();
+    _vcPlayAudio = audio; _vcPlayBtn = btn; _vcPlayUrl = url;
+    btn.disabled = false;
+    btn.textContent = "⏹ 停止";
+    await audio.play();
+  } catch (err) {
+    console.warn("[vc] 語音播放失敗:", err && err.message ? err.message : err);
+    if (typeof opts.showToast === "function") opts.showToast("語音載入失敗");
+    // 復原這顆按鈕 + 清狀態
+    if (_vcPlayUrl) { URL.revokeObjectURL(_vcPlayUrl); _vcPlayUrl = null; }
+    _vcPlayAudio = null; _vcPlayBtn = null;
+    btn.disabled = false;
+    btn.textContent = btn.dataset.label || "▶ 語音";
+  }
+}
+
 function closeSheet() {
   if (_sheet) _sheet.hidden = true;
+  vcStopPlayback();    // 關視窗 → 停掉正在播的語音(規則 5)
   vcReset();           // 關視窗 → 清錄音狀態(規則 5)
   setMode("text");     // 下次開回到打字預設
   _state = null;
