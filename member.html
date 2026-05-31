@@ -1735,7 +1735,7 @@
     const recordingsAudio = document.getElementById("recordingsAudio");
     let currentPlayingBtn = null;
     let currentPlayingFileId = null;
-    let recordingsPaused = false;   // B:只有「真的暫停中」才允許 resume(避免 src 失效時誤走續播)
+    let pausedFileId = null;   // B(b版):暫停中的 fileId、獨立旗標、只在最上面攔截續播、不碰全新播放路徑
     let playLoadingTimer = null;
 
     function pickMimeFromFilename(filename) {
@@ -1763,20 +1763,28 @@
     }
 
     async function playRecording(fileId, filename, btn) {
-      // 點同一筆且正在播 → 暫停(保留位置、不清 currentPlayingFileId、不重設 src)
-      if (currentPlayingFileId === fileId && !recordingsAudio.paused) {
-        recordingsAudio.pause();
-        recordingsPaused = true;        // 標記暫停中 → 下次點才走 resume
-        setPlayBtnState(btn, "idle");   // 回 ▶、但狀態保留 → 下次點從原地續
-        return;
-      }
-      // 點同一筆且「真的暫停中」+ 有有效 src → 從 currentTime 續播(不重新 fetch)
-      if (currentPlayingFileId === fileId && recordingsPaused && recordingsAudio.paused && recordingsAudio.src) {
-        recordingsPaused = false;
+      // 【續播】同筆暫停中 + 有有效 src → 從 currentTime 續播(獨立旗標、不重 fetch、不影響下面全新播放路徑)
+      if (pausedFileId === fileId && recordingsAudio.paused && recordingsAudio.src) {
+        pausedFileId = null;
+        currentPlayingBtn = btn;          // 復原狀態 → 之後可再暫停 / 切別筆能停這筆
+        currentPlayingFileId = fileId;
         setPlayBtnState(btn, "playing");
         recordingsAudio.play().catch(() => {});
         return;
       }
+
+      // 點同一筆且正在播 → 暫停(比照原版清 currentPlaying*;只多記 pausedFileId 供續播)
+      if (currentPlayingFileId === fileId && !recordingsAudio.paused) {
+        recordingsAudio.pause();
+        pausedFileId = fileId;            // ← 唯一新增:記住暫停的是哪筆(src 保留不動)
+        setPlayBtnState(btn, "idle");
+        currentPlayingBtn = null;
+        currentPlayingFileId = null;
+        return;
+      }
+
+      // 全新播放 / 切別筆:放棄任何暫停態(回到 4495cb2 的正確流程)
+      pausedFileId = null;
 
       // 點別筆 → 把當前播放的停掉、按鈕回 idle
       if (currentPlayingBtn && currentPlayingBtn !== btn) {
@@ -1786,8 +1794,6 @@
         recordingsAudio.load();
       }
 
-      // 全新播放 / 切別筆:一定重新 fetch + 設 src,清掉暫停旗標
-      recordingsPaused = false;
       // 進 loading
       setPlayBtnState(btn, "loading");
       currentPlayingBtn = btn;
@@ -1825,7 +1831,7 @@
     }
 
     recordingsAudio.addEventListener("ended", () => {
-      recordingsPaused = false;   // 播完 → 下次播該筆從頭(重 fetch)
+      pausedFileId = null;   // 播完 → 下次播該筆從頭(重 fetch)
       if (currentPlayingBtn) {
         setPlayBtnState(currentPlayingBtn, "idle");
         currentPlayingBtn = null;
