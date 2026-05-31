@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
   <style>
     /* ============================================================
        MEMBER PAGE · Hero / 錄音區 placeholder / 清單 placeholder
@@ -1140,7 +1140,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=3";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=4";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -1762,12 +1762,16 @@
     }
 
     async function playRecording(fileId, filename, btn) {
-      // 點同一筆且正在播 → 暫停
+      // 點同一筆且正在播 → 暫停(保留位置、不清 currentPlayingFileId、不重設 src)
       if (currentPlayingFileId === fileId && !recordingsAudio.paused) {
         recordingsAudio.pause();
-        setPlayBtnState(btn, "idle");
-        currentPlayingBtn = null;
-        currentPlayingFileId = null;
+        setPlayBtnState(btn, "idle");   // 回 ▶、但狀態保留 → 下次點從原地續
+        return;
+      }
+      // 點同一筆且暫停中 → 從 currentTime 續播(不重新 fetch)
+      if (currentPlayingFileId === fileId && recordingsAudio.paused && recordingsAudio.src) {
+        setPlayBtnState(btn, "playing");
+        recordingsAudio.play().catch(() => {});
         return;
       }
 

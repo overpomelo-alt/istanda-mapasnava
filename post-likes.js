@@ -298,7 +298,8 @@ function vcMimeFromName(filename) {
   return "audio/webm";
 }
 
-function vcStopPlayback() {
+// 真正釋放:pause + revoke objectURL + 清狀態 + 復原按鈕(切別顆 / 關視窗 / 播完才用)
+function vcReleasePlayback() {
   if (_vcPlayAudio) { try { _vcPlayAudio.pause(); } catch (e) {} }
   if (_vcPlayUrl) { URL.revokeObjectURL(_vcPlayUrl); _vcPlayUrl = null; }
   if (_vcPlayBtn) { _vcPlayBtn.textContent = _vcPlayBtn.dataset.label || "▶ 語音"; _vcPlayBtn.disabled = false; }
@@ -306,10 +307,19 @@ function vcStopPlayback() {
 }
 
 async function onVoiceClick(btn) {
-  // 同一顆正在播 → 停(toggle）
-  if (_vcPlayBtn === btn && _vcPlayAudio) { vcStopPlayback(); return; }
-  // 別顆在播 → 先停 A、復原 A 按鈕(一次只播一個）
-  if (_vcPlayAudio) vcStopPlayback();
+  // 同一顆:暫停 ↔ 續播(保留 audio + objectURL + 位置、不重抓、不 revoke)
+  if (_vcPlayBtn === btn && _vcPlayAudio) {
+    if (_vcPlayAudio.paused) {
+      btn.textContent = "⏹ 停止";
+      _vcPlayAudio.play().catch(() => {});
+    } else {
+      _vcPlayAudio.pause();
+      btn.textContent = btn.dataset.label || "▶ 語音";   // 回 ▶、可續播
+    }
+    return;
+  }
+  // 別顆在播 → 真正釋放 A、復原 A 按鈕(一次只播一個)
+  if (_vcPlayAudio) vcReleasePlayback();
 
   const opts = _state;
   const fileId = btn.dataset.fileid;
@@ -330,7 +340,7 @@ async function onVoiceClick(btn) {
     const blob = new Blob([bytes], { type: vcMimeFromName(filename) });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.onended = () => vcStopPlayback();
+    audio.onended = () => vcReleasePlayback();
     _vcPlayAudio = audio; _vcPlayBtn = btn; _vcPlayUrl = url;
     btn.disabled = false;
     btn.textContent = "⏹ 停止";
@@ -348,7 +358,7 @@ async function onVoiceClick(btn) {
 
 function closeSheet() {
   if (_sheet) _sheet.hidden = true;
-  vcStopPlayback();    // 關視窗 → 停掉正在播的語音(規則 5)
+  vcReleasePlayback();  // 關視窗 → 停掉正在播的語音(規則 5)
   vcReset();           // 關視窗 → 清錄音狀態(規則 5)
   setMode("text");     // 下次開回到打字預設
   _state = null;
