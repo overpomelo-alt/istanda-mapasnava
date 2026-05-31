@@ -289,7 +289,7 @@ function vcReset() {
    ============================================================ */
 let _vcPlayAudio = null;   // 當前播放的 Audio
 let _vcPlayBtn   = null;   // 當前播放對應的 ▶ 按鈕
-let _vcPlayUrl   = null;   // 播放用 objectURL(規則 5:停止/播完/切換都 revoke)
+// 播放用 objectURL 共用上面 VC-2 宣告的 _vcPlayUrl(同名變數、用法一致、不同時使用)
 
 function vcMimeFromName(filename) {
   const ext = (filename.split(".").pop() || "").toLowerCase();
