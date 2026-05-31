@@ -253,8 +253,7 @@ async function renderFeed(posts, membersMap) {
   posts.forEach(p => {
     const card = createPostCard(p, membersMap, deviceId);
     section.appendChild(card);
-    const ph = card.querySelector("img[data-photo-fileid]");
-    if (ph) photoObserver.observe(ph);
+    card.querySelectorAll("img[data-photo-fileid]").forEach(ph => photoObserver.observe(ph));
   });
 }
 
@@ -288,13 +287,15 @@ function createPostCard(post, membersMap, deviceId) {
   const authorInitials = author.initials || initialsOf(author.name) || "??";
 
   const photos = Array.isArray(post.photos) ? post.photos : [];
-  const first = photos[0];
 
-  // 照片區:v1 先只載第一張(lazy、data-photo-fileid 等 observer 觸發);多張角落標 1/N
-  const mediaHtml = first
-    ? `<img data-photo-fileid="${escapeHtml(first.fileId)}" alt="${escapeHtml(authorName)} 的照片" />
+  // 照片區:橫向 scroll-snap 輪播、每張一個 slide(lazy:每個 img 等 observer 觸發才載)。
+  // 多張時角落標「目前/總數」、隨捲動更新;單張時行為跟以前一樣(就一個 slide、無角標)。
+  const mediaHtml = photos.length > 0
+    ? `<div class="post__carousel">
+         ${photos.map(p => `<div class="post__slide"><img data-photo-fileid="${escapeHtml(p.fileId)}" alt="${escapeHtml(authorName)} 的照片" /></div>`).join("")}
+       </div>
        ${photos.length > 1
-         ? `<span style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>`
+         ? `<span class="post__photo-count" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:#fff;font-size:12px;padding:2px 9px;border-radius:11px;">1/${photos.length}</span>`
          : ""}`
     : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:13px;">(這篇沒有照片)</div>`;
 
@@ -326,6 +327,18 @@ function createPostCard(post, membersMap, deviceId) {
       <p class="post__time">${timeAgo(post.createdAt)}</p>
     </div>
   `;
+
+  // 照片輪播:橫滑時更新「目前/總數」角標(多張才有)
+  if (photos.length > 1) {
+    const carousel = article.querySelector(".post__carousel");
+    const countEl = article.querySelector(".post__photo-count");
+    if (carousel && countEl) {
+      carousel.addEventListener("scroll", () => {
+        const idx = Math.round(carousel.scrollLeft / carousel.clientWidth);
+        countEl.textContent = `${Math.min(photos.length, idx + 1)}/${photos.length}`;
+      }, { passive: true });
+    }
+  }
 
   // ❤️ 接共用 wireLikeButton(樂觀更新 + 寫失敗還原、規則 4)
   wireLikeButton({
@@ -401,8 +414,7 @@ function setupFeedListener(membersMap) {
         const cards = section.querySelectorAll(".post");
         if (change.newIndex >= cards.length) section.appendChild(card);
         else section.insertBefore(card, cards[change.newIndex]);
-        const ph = card.querySelector("img[data-photo-fileid]");
-        if (ph) photoObserver.observe(ph);   // 只有新卡才抓照片
+        card.querySelectorAll("img[data-photo-fileid]").forEach(ph => photoObserver.observe(ph));   // 只有新卡才抓照片(每張 slide）
       } else if (change.type === "modified") {
         const card = section.querySelector(`.post[data-post-id="${post.id}"]`);
         if (card) updatePostCardStats(card, post, deviceId);   // 就地、不重建、不碰照片
@@ -463,8 +475,8 @@ async function handlePostDeepLink(membersMap) {
       const empty = section.querySelector(".feed-loading");
       if (empty) empty.remove();
       section.insertBefore(card, section.firstChild);
-      const ph = card.querySelector("img[data-photo-fileid]");
-      if (ph) loadCardPhoto(ph);   // 單獨抓的卡片沒掛 observer、直接載
+      // 單獨抓的卡片沒掛 observer、直接載(多張 slide 全載、單一卡片可接受)
+      card.querySelectorAll("img[data-photo-fileid]").forEach(ph => loadCardPhoto(ph));
     } catch (err) {
       console.warn("[feed] 深連結貼文載入失敗:", err && err.message ? err.message : err);
       showToast("這篇貼文找不到了");

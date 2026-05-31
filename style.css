@@ -292,6 +292,17 @@ img { display: block; max-width: 100%; }
   width: 100%; height: 100%;
   object-fit: cover;
 }
+/* 照片輪播(多張橫滑、scroll-snap;單張時就一個 slide、行為不變) */
+.post__carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  width: 100%; height: 100%;
+  scrollbar-width: none;
+}
+.post__carousel::-webkit-scrollbar { display: none; }
+.post__slide { flex: 0 0 100%; scroll-snap-align: center; }
+.post__slide img { width: 100%; height: 100%; object-fit: cover; }
 /* 之後 Google Drive 嵌入用:把 <iframe> 放這裡 */
 .post__media iframe {
   position: absolute; inset: 0;
