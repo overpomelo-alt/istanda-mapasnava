@@ -295,13 +295,16 @@ img { display: block; max-width: 100%; }
 /* 照片輪播(多張橫滑、scroll-snap;單張時就一個 slide、行為不變) */
 .post__carousel {
   display: flex;
+  flex-wrap: nowrap;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   width: 100%; height: 100%;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;   /* 舊 iOS Safari 慣性捲動 */
 }
 .post__carousel::-webkit-scrollbar { display: none; }
-.post__slide { flex: 0 0 100%; scroll-snap-align: center; }
+/* min-width:100% 防 flex item min-content 把 slide 壓窄、確保 N 張總寬 > 容器才會 overflow */
+.post__slide { flex: 0 0 100%; min-width: 100%; scroll-snap-align: center; }
 .post__slide img { width: 100%; height: 100%; object-fit: cover; }
 /* 之後 Google Drive 嵌入用:把 <iframe> 放這裡 */
 .post__media iframe {
