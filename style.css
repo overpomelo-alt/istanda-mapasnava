@@ -46,6 +46,16 @@
   --max-w: 512px;   /* mobile-first 最大寬度 */
 
   --font-sans: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* A 視覺三項:發文 modal 發佈鈕 / 加照片框 / 個人頁發貼文鈕(集中 token、member.html 引用)*/
+  --publish-gradient:    linear-gradient(135deg, #2e6dbb, #0c2d56);
+  --caption-placeholder: #8f8a80;
+  --photo-box-bg:        #FAF4E8;   /* 暖米白 */
+  --photo-box-border:    #d6c4a0;
+  --photo-box-plus:      #0C447C;   /* 加照片「+」深藍 */
+  --postbtn-bg:          #F1EFE8;   /* 暖灰、發貼文鈕實心 */
+  --postbtn-border:      #d6d3ca;
+  --postbtn-text:        #2c2c2a;   /* 深灰、不用藍不用紅、避免跟紅麥克風打架 */
 }
 
 /* ===== Reset ===== */
