@@ -11,6 +11,15 @@
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="style.css?v=8" />
+
+  <!-- PWA(Task 6):路徑全相對 ./ -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Istanda" />
   <style>
     /* ============================================================
        MEMBER PAGE · Hero / 錄音區 placeholder / 清單 placeholder
@@ -3452,6 +3461,27 @@
     })();
 
     main();
+  </script>
+
+  <!-- PWA Service Worker 註冊 + 自動更新(Task 6) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          reg.update();
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+        }).catch(e => console.error('[SW] 註冊失敗', e));
+      });
+      // 新版 SW 接管 → 自動 reload(解「要清資料才看到新版」)
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
+    }
   </script>
 
 </body>

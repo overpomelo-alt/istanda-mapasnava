@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>把 Istanda 加到手機桌面</title>
+<link rel="stylesheet" href="./style.css?v=8">
+<style>
+  .guide { max-width: 640px; margin: 0 auto; padding: 24px 18px 64px; }
+  .guide h1 { font-size: 1.5rem; }
+  .guide ol { font-size: 1.15rem; line-height: 1.9; padding-left: 1.4em; }
+  .guide .warn { background:#FFF7E0; border-left:5px solid #E0A800; padding:12px 14px; border-radius:8px; margin:16px 0; font-size:1.05rem; }
+  .guide img { width:100%; border:1px solid #ddd; border-radius:10px; margin:8px 0 20px; }
+  .guide .tab { display:flex; gap:8px; margin-bottom:8px; }
+  .guide .tab button { flex:1; padding:12px; font-size:1.05rem; border-radius:10px; border:1px solid #ccc; background:#fff; }
+  .guide .tab button.on { background:#1F3A5F; color:#fff; } /* 深藍,非紅 */
+  .panel { display:none; } .panel.on { display:block; }
+</style>
+</head>
+<body>
+<div class="guide">
+  <h1>把「Istanda」加到手機桌面</h1>
+  <p>加到桌面後,點圖示就能直接打開,跟一般 App 一樣。</p>
+
+  <div class="tab">
+    <button id="bi" class="on" onclick="sw('i')">iPhone</button>
+    <button id="ba" onclick="sw('a')">Android</button>
+  </div>
+
+  <div id="pi" class="panel on">
+    <div class="warn">⚠️ 一定要用 <b>Safari</b> 打開這個網頁(從 LINE 點進來不行)。</div>
+    <ol>
+      <li>用 Safari 打開網站</li>
+      <li>點畫面<b>最下方</b>中間的「分享」鈕(方框 + 向上箭頭)</li>
+      <li>往下滑,找到「<b>加入主畫面</b>」並點它</li>
+      <li>右上角點「<b>加入</b>」</li>
+      <li>回到桌面,就會看到 Istanda 圖示</li>
+    </ol>
+    <img src="./guide/ios-1.jpg" alt="iPhone 步驟圖(待補)">
+  </div>
+
+  <div id="pa" class="panel">
+    <div class="warn">⚠️ 用 <b>Chrome</b> 打開這個網頁(從 LINE 點進來請先改用 Chrome 開)。</div>
+    <ol>
+      <li>用 Chrome 打開網站</li>
+      <li>點右上角「<b>⋮</b>」選單</li>
+      <li>選「<b>安裝應用程式</b>」或「加到主畫面」</li>
+      <li>點「安裝」/「加入」</li>
+      <li>回到桌面,就會看到 Istanda 圖示</li>
+    </ol>
+    <img src="./guide/android-1.jpg" alt="Android 步驟圖(待補)">
+  </div>
+</div>
+<script>
+  function sw(t){
+    var i = t === 'i';
+    document.getElementById('pi').classList.toggle('on', i);
+    document.getElementById('pa').classList.toggle('on', !i);
+    document.getElementById('bi').classList.toggle('on', i);
+    document.getElementById('ba').classList.toggle('on', !i);
+  }
+</script>
+</body>
+</html>

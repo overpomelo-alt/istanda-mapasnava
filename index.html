@@ -7,6 +7,15 @@
   <title>Istanda Takiscipanan · 家族語言記事</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
   <link rel="stylesheet" href="style.css?v=8" />
+
+  <!-- PWA(Task 6):路徑全相對 ./ -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Istanda" />
 </head>
 <body>
 
@@ -101,6 +110,11 @@
       <div class="feed-loading">載入家族記事中…</div>
     </section>
 
+    <!-- PWA 安裝引導入口(Task 6,位置可再調) -->
+    <div style="text-align:center; margin:18px 0 4px;">
+      <a href="./install.html" style="display:inline-block; font-size:14px; color:#1F3A5F; text-decoration:none; padding:8px 14px; border:1px solid #ccd6e2; border-radius:20px;">📲 安裝到桌面</a>
+    </div>
+
   </main>
 
   <!-- ============ BOTTOM NAV (底部導覽列) ============ -->
@@ -139,6 +153,27 @@
   <!-- ============ Firebase + 應用邏輯 ============ -->
   <!-- ⚠️ 你之後要把這個換成你自己的 Firebase 設定 -->
   <script type="module" src="script.js?v=8"></script>
+
+  <!-- PWA Service Worker 註冊 + 自動更新(Task 6) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          reg.update();
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+        }).catch(e => console.error('[SW] 註冊失敗', e));
+      });
+      // 新版 SW 接管 → 自動 reload(解「要清資料才看到新版」)
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return;
+        reloaded = true;
+        location.reload();
+      });
+    }
+  </script>
 
 </body>
 </html>
