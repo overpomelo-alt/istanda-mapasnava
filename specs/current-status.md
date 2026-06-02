@@ -26,6 +26,14 @@
 
 ## ✅ 已完成
 
+### Task 6 PWA：已實作 + push（commit 601e740）— 🟡 待驗收（尚未標完成）
+- **已完成**：`manifest.json`、`sw.js`（cache 前綴 `istanda-cache-istanda-v8`、Apps Script / Firestore network-only skip）、6 圖示（由 `icons/source.png` 1024² 縮出：192/512/maskable-512/apple-touch-180/favicon-32 + 根 favicon.ico）、`index.html` / `member.html` 兩頁 head 標籤 + SW 註冊與 controllerchange 自動更新、`install.html`（iOS/Android 安裝引導）、首頁「📲 安裝到桌面」入口
+- **待驗收（四項驗過才改標「完成」）**：
+  1. 桌機 DevTools：SW activated / manifest valid / cache 出現
+  2. iOS standalone 真機錄音：錄 → 上傳 → 播放
+  3. Android 安裝
+  4. `install.html` 截圖 `guide/ios-1.jpg`、`guide/android-1.jpg` 待補
+
 ### 基礎建設
 - [x] Firebase 專案建立（istanda-mapasnava，asia-east1）
 - [x] Firestore 資料庫（test mode）
