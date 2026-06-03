@@ -1551,12 +1551,14 @@
         // Task 5 Step 1:已知子資料夾就帶 folderId(走快速主路徑)、首次上傳為空(走保底)
         const knownFolderId = (memberData && memberData.driveFolderId) ? memberData.driveFolderId : "";
 
-        // POST blind:Apps Script web app POST 跨域 redirect 到 googleusercontent.com、
-        // 瀏覽器擋 redirect 後的 response body、resp.json() 拿到的 data.fileId 是 undefined。
-        // 已實測泰雅語 App 同套 workaround:不解析 response、信任 Drive 端寫入、由下面 GET list 撈 fileId。
-        // Task 5 Step 1:POST 多帶 memberId / memberName / folderId、讓後端寫進該成員子資料夾。
+        // 排序 fix(2026-06-03):POST 直傳、直接讀回應 { ok, fileId, filename, folderId, mimeType }(.gs doPost)。
+        // 寫 Firestore 的 filename / fileId 一律用「後端實際回傳那個」= 權威值。
+        // 不再重撈 Drive list 取 sortByNewest()[0] 來「猜最新」:那會 race —— 剛上傳的檔 Drive 還沒索引到時、
+        // 會抓到上一筆舊檔名寫進新文件、害排序錯位(本次 bug 真因)。
+        // POST 為無自訂 header 的 simple request(body 預設 text/plain)、回應跨域可讀,
+        // 與線上已運作的 GET ?id= / ?action=list 同一套 redirect 機制。
         showProgressToast("post", 55);  // 子步 3c.3:四段進度 2/4
-        await fetch(APPS_SCRIPT_URL, {
+        const postResp = await fetch(APPS_SCRIPT_URL, {
           method: "POST",
           body: JSON.stringify({
             audio: base64,
@@ -1567,35 +1569,42 @@
           })
         });
 
-        // GET ?action=list 撈剛寫入的 fileId(GET 跨域 redirect 行為 CORS 友善、能拿 response body)
-        // Task 5 Step 1 D2 雙模式:有 folderId 走主路徑、無 folderId(首次)走保底 + 回填 driveFolderId
         showProgressToast("get", 85);  // 子步 3c.3:四段進度 3/4
-        let latest;
+        let latest = null;
         let backfillFolderId = null;
-        if (knownFolderId) {
-          // 主路徑:?action=list&folderId= → { ok, folderId, files:[{fileId, filename}] }
-          const resp = await fetch(`${APPS_SCRIPT_URL}?action=list&folderId=${encodeURIComponent(knownFolderId)}`);
-          const data = await resp.json();
-          const files = (data && data.files) || [];
-          if (files.length === 0) {
-            throw new Error("Apps Script list(folderId) 撈不到檔案、POST 可能失敗");
+        try {
+          const result = await postResp.json();
+          if (result && result.ok && result.fileId && result.filename) {
+            latest = { fileId: result.fileId, filename: result.filename };
+            // 首次上傳:後端回的 folderId 就是剛建/找到的成員子夾、回填 members.driveFolderId
+            if (!knownFolderId) backfillFolderId = result.folderId || null;
           }
-          latest = sortByNewest(files)[0];
-        } else {
-          // 保底路徑(首次上傳):?action=list → { ok, mode:'fallback', result:{ memberId:[{fileId, filename, parentFolderId}] } }
-          const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
-          const data = await resp.json();
-          const files = (data.result && data.result[memberId]) || [];
-          if (files.length === 0) {
-            throw new Error("Apps Script list(保底) 撈不到 memberId 的檔案、POST 可能失敗");
-          }
-          latest = sortByNewest(files)[0];
-          backfillFolderId = latest.parentFolderId || null; // 首次:拿剛建的子資料夾 ID 回填 Firestore
+        } catch (e) {
+          // 極少數瀏覽器(歷史上疑似 iOS Safari)擋跨域 redirect body → 下方走保底重撈
+          console.warn("[upload] POST 回應讀不到、改走 ?action=list 保底:", (e && e.message) || e);
         }
 
-        // edge case B':防 Apps Script list schema 變更導致欄位缺失
+        // 保底:只有 POST 回應拿不到 fileId/filename 時才重撈 Drive list(舊 Task 5 路徑、有 race 但不漏件)
+        if (!latest) {
+          if (knownFolderId) {
+            const resp = await fetch(`${APPS_SCRIPT_URL}?action=list&folderId=${encodeURIComponent(knownFolderId)}`);
+            const data = await resp.json();
+            const files = (data && data.files) || [];
+            if (files.length === 0) throw new Error("POST 回應讀不到、保底 list(folderId) 也撈不到檔案");
+            latest = sortByNewest(files)[0];
+          } else {
+            const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+            const data = await resp.json();
+            const files = (data.result && data.result[memberId]) || [];
+            if (files.length === 0) throw new Error("POST 回應讀不到、保底 list 也撈不到 memberId 的檔案");
+            latest = sortByNewest(files)[0];
+            backfillFolderId = latest.parentFolderId || null;
+          }
+        }
+
+        // edge case B':防欄位缺失
         if (!latest.fileId || !latest.filename) {
-          throw new Error("Apps Script list 回的 latest 缺 fileId 或 filename");
+          throw new Error("拿不到 fileId 或 filename(POST 回應與保底 list 都失敗)");
         }
 
         // 寫 Firestore recordings(N1 拍板:likes/comments 直接寫新格式 array)
@@ -1665,7 +1674,13 @@
         let items = (data.result && data.result[memberId]) || data[memberId] || [];
         // VC-3a 修:語音留言檔名為 {memberId}_cmt_…、被後端保底 list 混進此清單;
         // 它們不是「錄音」、也沒有 recordings 文件 → 濾掉(同時修正「N 則錄音」灌水)
-        items = items.filter(it => !((it.filename || "").includes("_cmt_")));
+        // 排序 fix:後端保底 list 也會把照片(.jpg 等)一起列出來、混進純錄音清單;
+        // 只保留音訊副檔名(.webm / .mp4 / .m4a),濾掉照片與其他非錄音檔。
+        items = items.filter(it => {
+          const fn = it.filename || "";
+          if (fn.includes("_cmt_")) return false;       // 語音留言、非錄音
+          return /\.(webm|mp4|m4a)$/i.test(fn);          // 只留音訊
+        });
         // 排序同子步 3c.2:filename desc(時間戳大=新)、tiebreak fileId desc(共用 sortByNewest)
         sortByNewest(items);
         allRecordings = items;
