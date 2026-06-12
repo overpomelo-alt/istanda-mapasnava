@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=8";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=9";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -458,7 +458,7 @@ function updatePostCardStats(card, post, deviceId) {
   }
 }
 
-/* 深連結:?post={postId} → 開那篇。在初次 feed 裡 → scroll + 高亮;
+/* 深連結:#post={postId}(相容舊 ?post=)→ 開那篇。在初次 feed 裡 → scroll + 高亮;
    不在 → getDoc 單獨抓、prepend 到最上;找不到 → toast(規則 4:不整頁壞)。 */
 async function handlePostDeepLink(membersMap) {
   const pid = getDeepLinkPostId();

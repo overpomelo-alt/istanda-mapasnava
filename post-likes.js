@@ -594,14 +594,15 @@ export function wireCommentButton(opts) {
 }
 
 /* ============================================================
-   分享 + 深連結(?post={postId})
+   分享 + 深連結(#post={postId})
    ============================================================ */
 /* 分享一篇貼文:Web Share API 優先(系統選單含 LINE)、不支援/失敗退 LINE 網址 scheme。
-   連結 = 此頁網址 + ?post={postId}(保留既有 query、如 member.html 的 ?id=)。 */
+   連結 = 此頁網址 + #post={postId}(hash、對齊既有 #rec=;fragment 不進 SW 快取、不污染殼。
+   保留既有 query、如 member.html 的 ?id=;清掉舊 ?post= 殘留、不雙帶)。 */
 export async function sharePost(post, authorName) {
   const u = new URL(window.location.href);
-  u.searchParams.set("post", post.id);
-  u.hash = "";
+  u.searchParams.delete("post");        // 舊 query 格式不殘留
+  u.hash = "post=" + post.id;           // #post=<id>(URL.hash setter 會自動補前綴 #)
   const url = u.toString();
   const who = authorName ? `${authorName} 的貼文` : "家族貼文";
   const text = post.text ? post.text.slice(0, 40) : "來看看這篇家族貼文";
@@ -624,12 +625,21 @@ export function wireShareButton(opts) {
   btn.addEventListener("click", () => sharePost(post, authorName));
 }
 
-// 深連結 query 讀 / 清(清掉避免 F5 重跳;保留其他 query 如 ?id= 與 hash)
+// 深連結讀:優先新格式 #post=<id>(對齊 #rec=);找不到再退舊格式 ?post=<id>
+// (LINE 上已發出去的舊連結不破、規則 8)。空 id 視同沒有(規則 4 防呆)。
 export function getDeepLinkPostId() {
-  return new URLSearchParams(window.location.search).get("post");
+  const h = window.location.hash;                       // 例:"#post=abc123"
+  if (h.startsWith("#post=")) {
+    const id = h.slice(6);
+    if (id) return id;
+  }
+  const q = new URLSearchParams(window.location.search).get("post");
+  return q || null;
 }
+// 清掉避免 F5 重跳:新舊兩種格式都清;hash 只在是 #post= 時清(不碰 #rec= 等其他 hash)
 export function clearDeepLinkPostId() {
   const u = new URL(window.location.href);
-  u.searchParams.delete("post");
+  u.searchParams.delete("post");                        // 清舊 query 格式
+  if (u.hash.startsWith("#post=")) u.hash = "";         // 清新 hash 格式、保留其他 hash
   history.replaceState({}, "", u.pathname + (u.search || "") + (u.hash || ""));
 }

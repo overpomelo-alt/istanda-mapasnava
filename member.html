@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=9" />
 
   <!-- PWA(Task 6):路徑全相對 ./ -->
   <link rel="manifest" href="./manifest.json" />
@@ -1150,7 +1150,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=8";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=9";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -3314,7 +3314,7 @@
       }
     }
 
-    /* 深連結:?post={postId} → 開那篇(個人頁版)。在貼文清單裡 → scroll + 高亮;
+    /* 深連結:#post={postId}(相容舊 ?post=)→ 開那篇(個人頁版)。在貼文清單裡 → scroll + 高亮;
        不在 → getDoc 單獨抓 prepend;找不到 → toast(規則 4)。 */
     async function handleMemberPostDeepLink() {
       const pid = getDeepLinkPostId();
@@ -3435,7 +3435,7 @@
         ensureIdentity: async (cb) => { await ensureMembersLoaded(); openIdentityModalLocal(() => cb()); },
         showToast
       });
-      // ↗️ 接共用 wireShareButton(連結帶 ?id= 與 ?post=、Web Share API → LINE 退路)
+      // ↗️ 接共用 wireShareButton(連結帶 ?id= 與 #post=、Web Share API → LINE 退路)
       wireShareButton({ btn: article.querySelector(".post-share-btn"), post, authorName });
       return article;
     }
