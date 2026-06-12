@@ -56,6 +56,11 @@
   --postbtn-bg:          #F1EFE8;   /* 暖灰、發貼文鈕實心 */
   --postbtn-border:      #d6d3ca;
   --postbtn-text:        #2c2c2a;   /* 深灰、不用藍不用紅、避免跟紅麥克風打架 */
+
+  /* 照片放大 lightbox(集中 token、首頁與個人頁共用)*/
+  --lightbox-bg:         rgba(10,10,10,0.92);  /* 深黑半透明 backdrop(非紅、不刺眼)*/
+  --lightbox-z:          10000;                /* 蓋過 splash(9999)等所有層 */
+  --lightbox-close:      48px;                 /* ✕ 點擊區(阿嬤好按、>44px 觸控標準)*/
 }
 
 /* ===== Reset ===== */
@@ -324,6 +329,32 @@ img { display: block; max-width: 100%; }
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   border: 0;
+}
+
+/* ============================================================
+   照片放大 lightbox(JS 動態建一層、append 到 body;首頁/個人頁共用)
+   ============================================================ */
+body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
+.lightbox {
+  position: fixed; inset: 0; z-index: var(--lightbox-z);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--lightbox-bg);
+  padding: 24px;
+}
+.lightbox[hidden] { display: none; }       /* flex 會蓋掉 hidden 預設、補回隱藏 */
+.lightbox__img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;                     /* 完整顯示、不裁切(卡片是 cover、放大改 contain）*/
+  border-radius: var(--radius-sm);
+  user-select: none; -webkit-touch-callout: none;
+}
+.lightbox__close {
+  position: absolute; top: 16px; right: 16px;
+  width: var(--lightbox-close); height: var(--lightbox-close);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; line-height: 1; color: #fff;
+  background: rgba(0,0,0,0.45); border: none; border-radius: 50%;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 
 /* 雙擊時冒出的大愛心動畫 */

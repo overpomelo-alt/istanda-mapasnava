@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=9";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox } from "./post-likes.js?v=10";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -543,6 +543,7 @@ function bindBottomNav() {
    ============================================================ */
 async function main() {
   bindBottomNav();
+  initPhotoLightbox();   // 照片放大 lightbox(委派、綁一次;首頁/個人頁共用 post-likes.js 同一支)
 
   try {
     // 抓家族成員

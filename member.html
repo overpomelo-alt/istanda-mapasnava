@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=10" />
 
   <!-- PWA(Task 6):路徑全相對 ./ -->
   <link rel="manifest" href="./manifest.json" />
@@ -1150,7 +1150,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId } from "./post-likes.js?v=9";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox } from "./post-likes.js?v=10";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -1257,6 +1257,7 @@
         handleDeepLink();           // Task 4 Step 3:被分享的那筆 → scroll + 金邊高亮
         setupRecordingsListener();  // 子步 3a:onSnapshot 接管後續更新(likes / comments / 新文件)
         loadMemberPosts();          // Task 5:載入此成員貼文(貼文 tab、預設顯示)
+        initPhotoLightbox();        // 照片放大 lightbox(委派、綁一次;與首頁共用 post-likes.js 同一支)
       } catch (err) {
         console.error(err);
         showError("連線出問題", "讀不到家族資料,請檢查網路後重新整理。");

@@ -643,3 +643,62 @@ export function clearDeepLinkPostId() {
   if (u.hash.startsWith("#post=")) u.hash = "";         // 清新 hash 格式、保留其他 hash
   history.replaceState({}, "", u.pathname + (u.search || "") + (u.hash || ""));
 }
+
+/* ============================================================
+   照片放大 lightbox(首頁 + 個人頁共用同一支;事件委派、不每張卡 wire)
+   - 重用卡片已載入的 data: URL、絕不重打 Apps Script(只放大 data: 開頭的圖)
+   - backdrop 深黑、✕ 點擊區大;點背景或 ✕ 關、桌機 Esc 關
+   - 開啟鎖 body 捲動、關閉還原(用完重置 src 與 class、規則 5)
+   ============================================================ */
+let _lightboxEl = null;
+function ensureLightbox() {
+  if (_lightboxEl) return _lightboxEl;
+  const el = document.createElement("div");
+  el.className = "lightbox";
+  el.id = "photoLightbox";
+  el.hidden = true;
+  el.innerHTML =
+    `<button type="button" class="lightbox__close" aria-label="關閉照片">✕</button>` +
+    `<img class="lightbox__img" alt="" />`;
+  // 點背景(el 本身)或 ✕ 關;點圖本身不關(避免誤觸)
+  el.addEventListener("click", (e) => {
+    if (e.target === el || (e.target.closest && e.target.closest(".lightbox__close"))) closeLightbox();
+  });
+  document.body.appendChild(el);
+  _lightboxEl = el;
+  return el;
+}
+
+export function openLightbox(src, alt) {
+  if (!src || !src.startsWith("data:")) return;   // 只放大「卡片已載入」的圖、不重打 Apps Script
+  const el = ensureLightbox();
+  const img = el.querySelector(".lightbox__img");
+  img.src = src;
+  img.alt = alt || "";
+  el.hidden = false;
+  document.body.classList.add("lightbox-open");   // 鎖捲動
+}
+
+export function closeLightbox() {
+  if (!_lightboxEl || _lightboxEl.hidden) return;
+  _lightboxEl.hidden = true;
+  const img = _lightboxEl.querySelector(".lightbox__img");
+  if (img) img.src = "";                          // 重置狀態、釋放大圖
+  document.body.classList.remove("lightbox-open"); // 還原捲動
+}
+
+/* 一頁呼叫一次:事件委派接所有貼文照片點擊(新卡自動涵蓋、不每張 wire;規則 2/3)。
+   只放大已載入(data:)的圖、未載入/失敗的略過。Esc 關(桌機)。重複呼叫只綁一次。 */
+let _lightboxInited = false;
+export function initPhotoLightbox() {
+  if (_lightboxInited) return;
+  _lightboxInited = true;
+  document.addEventListener("click", (e) => {
+    const img = e.target.closest && e.target.closest(".post__media img");
+    if (!img) return;
+    openLightbox(img.currentSrc || img.src, img.alt);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
+  });
+}
