@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=14";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=15";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -577,31 +577,63 @@ function openSettings() {
   modal.querySelector(".identity-modal__backdrop").addEventListener("click", () => modal.remove());
 }
 
+/* 介面大小:讀 / 套用(套用 = 切 :root 的 data-font-scale + 存 localStorage;倍率值在 style.css)*/
+function getFontScale() {
+  try { const s = localStorage.getItem("istanda_font_scale"); return (s === "large" || s === "xlarge") ? s : "standard"; }
+  catch (e) { return "standard"; }
+}
+function applyFontScale(scale) {
+  const v = (scale === "large" || scale === "xlarge") ? scale : "standard";
+  if (v === "standard") document.documentElement.removeAttribute("data-font-scale");
+  else document.documentElement.setAttribute("data-font-scale", v);
+  try { localStorage.setItem("istanda_font_scale", v); } catch (e) {}
+}
+
 function renderSettingsBody(body) {
   const me = getMyMember();
-  if (!me) {
-    // 沒認領 → 提示先認領、不給改(規則4)
-    body.innerHTML = `
-      <div class="settings-section">
-        <div class="settings-section__title">改名字</div>
-        <p class="settings-hint">你還沒認領身分,先選一個身分才能改名字。</p>
-        <button class="settings-save-btn" id="settingsPickIdentity">選擇我的身分</button>
-      </div>`;
+  // 改名(需認領;沒認領→提示)
+  const renameHtml = me
+    ? `<div class="settings-section">
+         <div class="settings-section__title">改名字</div>
+         <input class="settings-input" id="settingsNameInput" type="text" maxlength="20" placeholder="輸入你的名字" />
+         <button class="settings-save-btn" id="settingsSaveName">儲存</button>
+       </div>`
+    : `<div class="settings-section">
+         <div class="settings-section__title">改名字</div>
+         <p class="settings-hint">你還沒認領身分,先選一個身分才能改名字。</p>
+         <button class="settings-save-btn" id="settingsPickIdentity">選擇我的身分</button>
+       </div>`;
+  // 介面大小(不需認領、永遠顯示)
+  const scale = getFontScale();
+  const sizeBtn = (val, label, fs) =>
+    `<button class="settings-size-btn${scale === val ? " settings-size-btn--on" : ""}" data-scale="${val}" style="font-size:${fs}px">${label}</button>`;
+  const fontHtml = `
+    <div class="settings-section">
+      <div class="settings-section__title">介面大小</div>
+      <div class="settings-sizes">
+        ${sizeBtn("standard", "標準", 15)}${sizeBtn("large", "大", 18)}${sizeBtn("xlarge", "特大", 21)}
+      </div>
+    </div>`;
+  body.innerHTML = renameHtml + fontHtml;
+
+  // 改名 wiring
+  if (me) {
+    const input = body.querySelector("#settingsNameInput");
+    input.value = me.name || "";
+    body.querySelector("#settingsSaveName").addEventListener("click", () => saveMyName(input.value));
+  } else {
     body.querySelector("#settingsPickIdentity").addEventListener("click", () => {
       document.getElementById("settingsSheet")?.remove();
       openIdentityModal(() => openSettings());   // 認領完自動重開設定
     });
-    return;
   }
-  body.innerHTML = `
-    <div class="settings-section">
-      <div class="settings-section__title">改名字</div>
-      <input class="settings-input" id="settingsNameInput" type="text" maxlength="20" placeholder="輸入你的名字" />
-      <button class="settings-save-btn" id="settingsSaveName">儲存</button>
-    </div>`;
-  const input = body.querySelector("#settingsNameInput");
-  input.value = me.name || "";
-  body.querySelector("#settingsSaveName").addEventListener("click", () => saveMyName(input.value));
+  // 介面大小 wiring:點了即時生效 + 高亮(規則5:狀態同步)
+  body.querySelectorAll(".settings-size-btn").forEach(b => {
+    b.addEventListener("click", () => {
+      applyFontScale(b.dataset.scale);
+      body.querySelectorAll(".settings-size-btn").forEach(x => x.classList.toggle("settings-size-btn--on", x === b));
+    });
+  });
 }
 
 async function saveMyName(raw) {

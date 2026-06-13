@@ -67,7 +67,16 @@
 
   /* 設定頁:阿嬤友善的大輸入框/大按鈕高度 */
   --settings-control-h:  52px;
+
+  /* 6-4 介面大小:整頁 zoom 倍率(單一來源;JS 只切 data-font-scale、不散落數字)*/
+  --ui-zoom: 1;            /* 標準 */
 }
+:root[data-font-scale="large"]  { --ui-zoom: 1.12; }   /* 大 */
+:root[data-font-scale="xlarge"] { --ui-zoom: 1.25; }   /* 特大(保守上限、避免破版)*/
+/* zoom 套 root:會 reflow(percentage 寬度仍貼齊螢幕、不水平爆版);
+   fixed header/bottom-nav 在 Android Chromium 下隨之放大且維持錨定。
+   若實機發現 nav 跑位 → fallback:把這行從 html 改套到捲動內容容器、nav 不放大。 */
+html { zoom: var(--ui-zoom); }
 
 /* ===== Reset ===== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -673,6 +682,19 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
   cursor: pointer;
 }
 .settings-save-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* 6-4 介面大小:三段大按鈕(選中高亮)*/
+.settings-sizes { display: flex; gap: 8px; }
+.settings-size-btn {
+  flex: 1; height: var(--settings-control-h);
+  font-weight: 600; color: var(--text);
+  background: var(--bg-soft); border: 1px solid var(--border);
+  border-radius: var(--radius-md); cursor: pointer;
+  line-height: 1;
+}
+.settings-size-btn--on {
+  color: #fff; background: var(--accent); border-color: var(--accent);
+}
 
 .identity-modal__cancel {
   width: 100%;
