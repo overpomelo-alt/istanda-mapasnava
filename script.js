@@ -11,9 +11,9 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
 import {
-  getFirestore, collection, getDocs, doc, getDoc, updateDoc, query, orderBy, onSnapshot
+  getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=16";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=17";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -614,7 +614,14 @@ function renderSettingsBody(body) {
         ${sizeBtn("standard", "標準", 15)}${sizeBtn("large", "大", 18)}${sizeBtn("xlarge", "特大", 21)}
       </div>
     </div>`;
-  body.innerHTML = renameHtml + fontHtml;
+  // 意見回饋(不需認領、永遠顯示;寫進 feedback 集合、Tien 從 console 看)
+  const fbHtml = `
+    <div class="settings-section">
+      <div class="settings-section__title">意見回饋</div>
+      <textarea class="settings-textarea" id="settingsFeedback" maxlength="500" placeholder="想說的話、遇到的問題、想要的功能…"></textarea>
+      <button class="settings-save-btn" id="settingsFeedbackSend" disabled>送出</button>
+    </div>`;
+  body.innerHTML = renameHtml + fontHtml + fbHtml;
 
   // 改名 wiring
   if (me) {
@@ -634,6 +641,43 @@ function renderSettingsBody(body) {
       body.querySelectorAll(".settings-size-btn").forEach(x => x.classList.toggle("settings-size-btn--on", x === b));
     });
   });
+  // 意見回饋 wiring:空白/全空格 → 送出鈕 disabled(長輩友善、不跳錯)
+  const fbInput = body.querySelector("#settingsFeedback");
+  const fbBtn = body.querySelector("#settingsFeedbackSend");
+  const syncFbBtn = () => { fbBtn.disabled = fbInput.value.trim().length === 0; };
+  fbInput.addEventListener("input", syncFbBtn);
+  syncFbBtn();
+  fbBtn.addEventListener("click", () => sendFeedback(fbInput, fbBtn));
+}
+
+/* 送出意見回饋 → addDoc 到 feedback 集合(未認領也可送、memberId/Name 為 null)。
+   送出中鈕 disabled+「送出中…」;成功清空+toast、失敗保留文字+toast(規則4)。 */
+async function sendFeedback(textarea, btn) {
+  const text = textarea.value.trim();
+  if (!text) return;                       // 雙保險:空白不送(鈕本就 disabled)
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "送出中…";
+  const me = getMyMember();
+  try {
+    await addDoc(collection(db, "feedback"), {
+      text,
+      memberId: getMyId() || null,
+      memberName: me ? (me.name || null) : null,   // 已認領附目前身分中文名、未認領 null
+      deviceId: getDeviceId(),
+      userAgent: navigator.userAgent,
+      createdAt: serverTimestamp(),
+    });
+    textarea.value = "";
+    btn.textContent = orig;
+    btn.disabled = true;                   // 清空後本來就該 disabled
+    showToast("已送出,謝謝 🌿");
+  } catch (e) {
+    console.warn("[feedback] 送出失敗:", e && e.message ? e.message : e);
+    btn.textContent = orig;
+    btn.disabled = false;                  // 文字保留 → 可再送
+    showToast("送出失敗,等一下再試");
+  }
 }
 
 async function saveMyName(raw) {
