@@ -720,37 +720,38 @@ async function deletePostEverywhere(db, post, appsScriptUrl, showToast) {
   for (const p of photos) {
     const fid = p && p.fileId;
     if (!fid) continue;
-    try {
-      const resp = await fetch(`${appsScriptUrl}?action=delete&fileId=${encodeURIComponent(fid)}`);
-      const data = await resp.json();
-      if (!data || !data.ok) throw new Error((data && data.error) || "delete failed");
-    } catch (e) {
+    try { await deleteDriveFile(appsScriptUrl, fid); }
+    catch (e) {
       console.warn("[delete] Drive 檔沒刪成功 fileId=" + fid, e && e.message ? e.message : e);
       if (showToast) showToast("有照片檔沒刪成功、之後再清");   // 留孤兒檔、不擋
     }
   }
 }
 
-/* 在卡片 header 右側掛「⋯ → 刪除這篇」選單(只在「這篇是我的」時建)。
-   opts = { article, post, db, getMyId, appsScriptUrl, showToast } */
-export function wirePostDeleteMenu(opts) {
-  const { article, post, db, getMyId, appsScriptUrl, showToast } = opts || {};
-  if (!article || !post) return;
-  const myId = getMyId && getMyId();
-  if (!myId || myId !== post.memberId) return;     // 權限閘:沒選身分 / 不是我發的 → 不顯示 ⋯
-  const header = article.querySelector(".post__header");
-  if (!header) return;
+/* 呼叫 Apps Script 刪一個 Drive 檔(?action=delete&fileId=)。!ok → throw 給呼叫端決定要不要 toast。
+   共用原語:貼文(走訪 photos)與錄音(單一 fileId)都用這支(規則 2)。 */
+export async function deleteDriveFile(appsScriptUrl, fileId) {
+  const resp = await fetch(`${appsScriptUrl}?action=delete&fileId=${encodeURIComponent(fileId)}`);
+  const data = await resp.json();
+  if (!data || !data.ok) throw new Error((data && data.error) || "delete failed");
+  return data;
+}
 
+/* 通用「⋯ 刪除選單」元件(規則2:貼文/錄音共用)。回傳 .post__menu wrap、呼叫端自行 append。
+   menuLabel=刪除項文字、confirmMsg=確認框、onDelete=確認後執行(async)、showToast 失敗用。
+   stopPropagation:點 ⋯ / 刪除項都不冒泡(不觸發照片 lightbox / play / like 等);點選單外面關。 */
+export function buildDeleteMenu({ menuLabel, confirmMsg, onDelete, showToast }) {
   const wrap = document.createElement("div");
   wrap.className = "post__menu";
   wrap.innerHTML =
     `<button type="button" class="post__menu-btn" aria-label="更多" aria-haspopup="true">⋯</button>` +
     `<div class="post__menu-pop" hidden>` +
-      `<button type="button" class="post__menu-del">🗑 刪除這篇</button>` +
+      `<button type="button" class="post__menu-del"></button>` +
     `</div>`;
   const btn = wrap.querySelector(".post__menu-btn");
   const pop = wrap.querySelector(".post__menu-pop");
   const delBtn = wrap.querySelector(".post__menu-del");
+  delBtn.textContent = menuLabel;                   // textContent:不走 innerHTML、無注入風險
 
   let onDocClick = null;
   const closeMenu = () => {
@@ -758,7 +759,7 @@ export function wirePostDeleteMenu(opts) {
     if (onDocClick) { document.removeEventListener("click", onDocClick); onDocClick = null; }
   };
   btn.addEventListener("click", (e) => {
-    e.stopPropagation();                            // 不冒泡:不觸發照片 lightbox / 不被剛掛的 onDocClick 立刻關
+    e.stopPropagation();                            // 不冒泡 + 不被剛掛的 onDocClick 立刻關
     if (!pop.hidden) { closeMenu(); return; }
     pop.hidden = false;
     onDocClick = (ev) => { if (!wrap.contains(ev.target)) closeMenu(); };  // 點選單外面 → 關
@@ -767,14 +768,29 @@ export function wirePostDeleteMenu(opts) {
   delBtn.addEventListener("click", async (e) => {
     e.stopPropagation();
     closeMenu();
-    if (!confirm("確定刪除這篇貼文?刪了就回不來囉。")) return;   // 確認框(規則4)
-    try {
-      await deletePostEverywhere(db, post, appsScriptUrl, showToast);
-      // 成功:onSnapshot removed 分支自動移除卡片、這裡不碰 DOM
-    } catch (err) {
-      console.warn("[delete] 貼文刪除失敗:", err && err.message ? err.message : err);
+    if (!confirm(confirmMsg)) return;               // 確認框(規則4)
+    try { await onDelete(); }                        // 成功:onSnapshot removed 分支移 UI、這裡不碰 DOM
+    catch (err) {
+      console.warn("[delete] 刪除失敗:", err && err.message ? err.message : err);
       if (showToast) showToast("刪除失敗、請再試");
     }
   });
-  header.appendChild(wrap);
+  return wrap;
+}
+
+/* 在貼文卡片 header 右側掛刪除選單(只在「這篇是我的」memberId===getMyId() 時建)。
+   opts = { article, post, db, getMyId, appsScriptUrl, showToast } */
+export function wirePostDeleteMenu(opts) {
+  const { article, post, db, getMyId, appsScriptUrl, showToast } = opts || {};
+  if (!article || !post) return;
+  const myId = getMyId && getMyId();
+  if (!myId || myId !== post.memberId) return;     // 權限閘:沒選身分 / 不是我發的 → 不顯示 ⋯
+  const header = article.querySelector(".post__header");
+  if (!header) return;
+  header.appendChild(buildDeleteMenu({
+    menuLabel: "🗑 刪除這篇",
+    confirmMsg: "確定刪除這篇貼文?刪了就回不來囉。",
+    onDelete: () => deletePostEverywhere(db, post, appsScriptUrl, showToast),
+    showToast
+  }));
 }

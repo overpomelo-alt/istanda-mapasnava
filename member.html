@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 
   <!-- PWA(Task 6):路徑全相對 ./ -->
   <link rel="manifest" href="./manifest.json" />
@@ -1146,11 +1146,11 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
     import {
-      getFirestore, doc, getDoc, getDocs,
+      getFirestore, doc, getDoc, getDocs, deleteDoc,
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu } from "./post-likes.js?v=11";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, buildDeleteMenu, deleteDriveFile } from "./post-likes.js?v=12";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -1748,6 +1748,15 @@
         row.querySelector(".recording-row__share").addEventListener("click", () => {
           handleShare(item.fileId);
         });
+        // ⋯ 刪除選單(6-2 Stage 3:只在自己錄音 memberId===getMyId() 時掛、共用 buildDeleteMenu)
+        if (getMyId() === memberId) {
+          row.querySelector(".recording-row__top").appendChild(buildDeleteMenu({
+            menuLabel: "🗑 刪除這段錄音",
+            confirmMsg: "確定刪除這段錄音?刪了就回不來囉。",
+            onDelete: () => deleteRecording(item.fileId),
+            showToast
+          }));
+        }
         recordingsList.appendChild(row);
       });
     }
@@ -1946,6 +1955,23 @@
       if (likeCount) likeCount.textContent = (likes || []).length;
     }
 
+    /* 刪一段錄音(6-2 Stage 3:固定順序 deleteDoc → recordCount-1 → deleteFile)。
+       沿用 like 的「by fileId 查 docRef」(規則2/3);removed 分支負責移 UI、這裡不碰清單。
+       拋錯 → 交給 buildDeleteMenu 統一 toast「刪除失敗」;孤兒檔則溫和提示後 return(不算失敗)。 */
+    async function deleteRecording(fileId) {
+      const snap = await getDocs(query(
+        collection(db, "recordings"),
+        where("memberId", "==", memberId),
+        where("fileId", "==", fileId)
+      ));
+      if (snap.empty) { showToast("這段找不到了、可能已刪除", 2500); return; }   // 孤兒檔/已刪(規則4)
+      await deleteDoc(snap.docs[0].ref);                              // 1) 刪 doc → removed 分支移 UI + 重排
+      try { await updateDoc(doc(db, "members", memberId), { recordCount: increment(-1) }); }  // 2) 統計 -1(規則13)
+      catch (e) { console.warn("[delete] recordCount -1 失敗:", e && e.message ? e.message : e); }
+      deleteDriveFile(APPS_SCRIPT_URL, fileId)                        // 3) 背景刪 Drive 檔(失敗只 toast、留孤兒檔)
+        .catch(() => showToast("錄音檔沒刪成功、之後再清", 2500));
+    }
+
     function setupRecordingsListener() {
       // 拆掉舊 listener(切換 member 才會發生、目前不會、防呆)
       if (recordingsListenerUnsub) { recordingsListenerUnsub(); recordingsListenerUnsub = null; }
@@ -1986,7 +2012,14 @@
               updateRowComments(fileId, row.comments);
             }
           } else if (change.type === "removed") {
-            // 6/15 前不會發生(沒刪除功能)、先不處理
+            // 6-2 Stage 3:刪除 → 從 allRecordings 移除該 fileId、重排 render、count 同步
+            const i = allRecordings.findIndex(r => r.fileId === fileId);
+            if (i !== -1) {
+              allRecordings.splice(i, 1);
+              renderRecordings(allRecordings);
+              localRecordCount = allRecordings.length;
+              document.getElementById("heroCount").textContent = `${localRecordCount} 則錄音`;
+            }
           }
         });
         if (listChanged) {
