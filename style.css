@@ -61,6 +61,9 @@
   --lightbox-bg:         rgba(10,10,10,0.92);  /* 深黑半透明 backdrop(非紅、不刺眼)*/
   --lightbox-z:          10000;                /* 蓋過 splash(9999)等所有層 */
   --lightbox-close:      48px;                 /* ✕ 點擊區(阿嬤好按、>44px 觸控標準)*/
+
+  /* 危險動作警示紅(刪除等;標準警示紅、非 bunun 調色盤紅、非互動紅心 --like-red)*/
+  --danger:              #d32f2f;
 }
 
 /* ===== Reset ===== */
@@ -291,6 +294,28 @@ img { display: block; max-width: 100%; }
   font-size: 14px; font-weight: 600;
   color: var(--text);
 }
+
+/* 貼文「⋯」刪除選單(6-2:只在自己貼文出現、JS 動態掛在 header 右側)*/
+.post__menu { position: relative; flex-shrink: 0; }
+.post__menu-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 20px; line-height: 1; color: var(--text-muted);
+  padding: 4px 8px; border-radius: var(--radius-sm);
+}
+.post__menu-pop {
+  position: absolute; top: 100%; right: 0; z-index: 30;
+  margin-top: 4px; padding: 4px; min-width: 132px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.post__menu-pop[hidden] { display: none; }
+.post__menu-del {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: none; cursor: pointer; text-align: left;
+  font-size: 14px; color: var(--danger); padding: 10px 12px;
+  border-radius: 6px; -webkit-tap-highlight-color: transparent;
+}
+.post__menu-del:hover { background: var(--bg-soft); }
 .post__location {
   font-size: 11px;
   color: var(--text-muted);

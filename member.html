@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=11" />
 
   <!-- PWA(Task 6):路徑全相對 ./ -->
   <link rel="manifest" href="./manifest.json" />
@@ -1150,7 +1150,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox } from "./post-likes.js?v=10";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu } from "./post-likes.js?v=11";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -3438,6 +3438,8 @@
       });
       // ↗️ 接共用 wireShareButton(連結帶 ?id= 與 #post=、Web Share API → LINE 退路)
       wireShareButton({ btn: article.querySelector(".post-share-btn"), post, authorName });
+      // ⋯ 刪除選單(6-2:只在自己貼文 memberId===getMyId() 時掛、與首頁共用一支)
+      wirePostDeleteMenu({ article, post, db, getMyId, appsScriptUrl: APPS_SCRIPT_URL, showToast });
       return article;
     }
 

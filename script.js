@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox } from "./post-likes.js?v=10";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu } from "./post-likes.js?v=11";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -365,6 +365,9 @@ function createPostCard(post, membersMap, deviceId) {
 
   // ↗️ 接共用 wireShareButton(Web Share API → LINE 退路)
   wireShareButton({ btn: article.querySelector(".post-share-btn"), post, authorName });
+
+  // ⋯ 刪除選單(6-2:只在自己貼文 memberId===getMyId() 時掛、首頁/個人頁共用一支)
+  wirePostDeleteMenu({ article, post, db, getMyId, appsScriptUrl: APPS_SCRIPT_URL, showToast });
 
   return article;
 }

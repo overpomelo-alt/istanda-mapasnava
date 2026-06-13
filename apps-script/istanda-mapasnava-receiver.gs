@@ -12,6 +12,8 @@
    - a7 十輪:doPost 加 multipart/form-data 偵測分支(handleFormDataTest)、
      不寫 Drive、只把 e.postData.length / type / debug 存進 PropertiesService;
      doGet 加 ?action=lastFormDataSize、讓前端撈出後端收到的 byte 數
+   - Task 6-2(2026-06-12):doGet 加 ?action=delete&fileId= → setTrashed(true) 進垃圾桶
+     (刪除鏈 Stage 1;list / 讀檔 / upload 分支一字未動)
    ============================================================ */
 
 const UPLOAD_FOLDER_ID = '1V_yWWyOUU4KIMOwThU1HByYTqlB7AE8d'; // 舊單一資料夾、?id= 讀舊檔 + 保底 list 過渡相容用
@@ -78,6 +80,21 @@ function doGet(e) {
       collectFolderFiles(subs.next(), result);
     }
     return jsonOut({ ok: true, mode: 'fallback', result: result });
+  }
+
+  // Task 6-2:刪檔(?action=delete&fileId=…)→ setTrashed 移到擁有者 Drive 垃圾桶
+  //   可救回 30 天、不需新 scope(DriveApp 已在用)。權限把關在前端(後端對誰都照刪)。
+  //   防呆(規則4):fileId 空 → no fileId;getFileById 找不到/丟例外 → try/catch 回錯、不讓整支爆。
+  //   ⚠️ 用獨立的 fileId 參數、不跟下方 ?id= 讀檔分支共用、避免誤刪正在讀的檔。
+  if (action === 'delete') {
+    const delId = e.parameter.fileId;
+    if (!delId) return jsonOut({ ok: false, error: 'no fileId' });
+    try {
+      DriveApp.getFileById(delId).setTrashed(true);
+      return jsonOut({ ok: true, fileId: delId });
+    } catch (err) {
+      return jsonOut({ ok: false, fileId: delId, error: err.toString() });
+    }
   }
 
   // ?id=fileId 讀單檔(維持不動、跟資料夾無關、舊錄音照讀)

@@ -7,7 +7,7 @@
    身分(我是誰)由各頁透過 callback 提供(getIdentity / ensureIdentity)、本模組不綁特定頁。
    ============================================================ */
 import {
-  doc, getDoc, updateDoc, arrayUnion, arrayRemove
+  doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, increment
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 function esc(s) {
@@ -701,4 +701,80 @@ export function initPhotoLightbox() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeLightbox();
   });
+}
+
+/* ============================================================
+   貼文刪除(6-2 Stage 2;首頁 script.js / 個人頁 member.html 共用一支)
+   權限:memberId 軟權限 — ⋯ 只在 getMyId()===post.memberId 時出現(過渡、6-3 升真身分)。
+   ============================================================ */
+/* 刪一篇貼文:固定順序 deleteDoc → postCount-1 → 走訪 photos 每張 deleteFile。
+   removed 分支(feed/個人頁 onSnapshot)會讓卡片自動消失、這裡不碰 DOM(別重複移除)。
+   deleteDoc 失敗 → throw 給呼叫端 toast;統計/Drive 失敗 → 只 warn+toast、不擋(背景善後)。 */
+async function deletePostEverywhere(db, post, appsScriptUrl, showToast) {
+  await deleteDoc(doc(db, "posts", post.id));                 // 1) 刪 Firestore doc
+  if (post.memberId) {                                        // 2) 統計 -1(規則13)
+    try { await updateDoc(doc(db, "members", post.memberId), { postCount: increment(-1) }); }
+    catch (e) { console.warn("[delete] postCount -1 失敗:", e && e.message ? e.message : e); }
+  }
+  const photos = Array.isArray(post.photos) ? post.photos : [];  // 3) 背景刪 Drive 檔(每張)
+  for (const p of photos) {
+    const fid = p && p.fileId;
+    if (!fid) continue;
+    try {
+      const resp = await fetch(`${appsScriptUrl}?action=delete&fileId=${encodeURIComponent(fid)}`);
+      const data = await resp.json();
+      if (!data || !data.ok) throw new Error((data && data.error) || "delete failed");
+    } catch (e) {
+      console.warn("[delete] Drive 檔沒刪成功 fileId=" + fid, e && e.message ? e.message : e);
+      if (showToast) showToast("有照片檔沒刪成功、之後再清");   // 留孤兒檔、不擋
+    }
+  }
+}
+
+/* 在卡片 header 右側掛「⋯ → 刪除這篇」選單(只在「這篇是我的」時建)。
+   opts = { article, post, db, getMyId, appsScriptUrl, showToast } */
+export function wirePostDeleteMenu(opts) {
+  const { article, post, db, getMyId, appsScriptUrl, showToast } = opts || {};
+  if (!article || !post) return;
+  const myId = getMyId && getMyId();
+  if (!myId || myId !== post.memberId) return;     // 權限閘:沒選身分 / 不是我發的 → 不顯示 ⋯
+  const header = article.querySelector(".post__header");
+  if (!header) return;
+
+  const wrap = document.createElement("div");
+  wrap.className = "post__menu";
+  wrap.innerHTML =
+    `<button type="button" class="post__menu-btn" aria-label="更多" aria-haspopup="true">⋯</button>` +
+    `<div class="post__menu-pop" hidden>` +
+      `<button type="button" class="post__menu-del">🗑 刪除這篇</button>` +
+    `</div>`;
+  const btn = wrap.querySelector(".post__menu-btn");
+  const pop = wrap.querySelector(".post__menu-pop");
+  const delBtn = wrap.querySelector(".post__menu-del");
+
+  let onDocClick = null;
+  const closeMenu = () => {
+    pop.hidden = true;
+    if (onDocClick) { document.removeEventListener("click", onDocClick); onDocClick = null; }
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();                            // 不冒泡:不觸發照片 lightbox / 不被剛掛的 onDocClick 立刻關
+    if (!pop.hidden) { closeMenu(); return; }
+    pop.hidden = false;
+    onDocClick = (ev) => { if (!wrap.contains(ev.target)) closeMenu(); };  // 點選單外面 → 關
+    document.addEventListener("click", onDocClick);
+  });
+  delBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    closeMenu();
+    if (!confirm("確定刪除這篇貼文?刪了就回不來囉。")) return;   // 確認框(規則4)
+    try {
+      await deletePostEverywhere(db, post, appsScriptUrl, showToast);
+      // 成功:onSnapshot removed 分支自動移除卡片、這裡不碰 DOM
+    } catch (err) {
+      console.warn("[delete] 貼文刪除失敗:", err && err.message ? err.message : err);
+      if (showToast) showToast("刪除失敗、請再試");
+    }
+  });
+  header.appendChild(wrap);
 }
