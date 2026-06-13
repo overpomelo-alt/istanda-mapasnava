@@ -73,10 +73,11 @@
 }
 :root[data-font-scale="large"]  { --ui-zoom: 1.12; }   /* 大 */
 :root[data-font-scale="xlarge"] { --ui-zoom: 1.25; }   /* 特大(保守上限、避免破版)*/
-/* zoom 套 root:會 reflow(percentage 寬度仍貼齊螢幕、不水平爆版);
-   fixed header/bottom-nav 在 Android Chromium 下隨之放大且維持錨定。
-   若實機發現 nav 跑位 → fallback:把這行從 html 改套到捲動內容容器、nav 不放大。 */
-html { zoom: var(--ui-zoom); }
+/* 修法A:zoom 套「內容容器」.app-main(正常流、會 reflow、不溢出),不套 html。
+   position:fixed 的 .bottom-nav / sticky .app-header 不被 zoom、維持原尺寸錨定
+   (避免 zoom×fixed 把 nav 撐成 1.25× 螢幕寬、整份文件被撐寬)。
+   首頁與個人頁主內容都包在 .app-main、一處即兩頁;.stories-scroll 在其內、橫向捲動不受影響。 */
+.app-main { zoom: var(--ui-zoom); }
 
 /* ===== Reset ===== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
