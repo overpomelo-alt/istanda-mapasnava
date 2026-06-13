@@ -11,9 +11,9 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
 import {
-  getFirestore, collection, getDocs, doc, getDoc, query, orderBy, onSnapshot
+  getFirestore, collection, getDocs, doc, getDoc, updateDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=13";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=14";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -555,11 +555,84 @@ function bindBottomNav() {
 }
 
 /* ============================================================
+   6-4 Block 1:設定頁殼(全螢幕 sheet、沿用 identity-modal overlay 樣式)+ 改名
+   殼之後 6-4 其他塊(放大/意見/頭貼/切換)都掛進 #settingsBody。
+   ============================================================ */
+function openSettings() {
+  const existing = document.getElementById("settingsSheet");
+  if (existing) existing.remove();
+  const modal = document.createElement("div");
+  modal.id = "settingsSheet";
+  modal.className = "identity-modal";   // 沿用既有 overlay(backdrop blur + slideUp panel)
+  modal.innerHTML = `
+    <div class="identity-modal__backdrop"></div>
+    <div class="identity-modal__panel">
+      <div class="identity-modal__header"><div class="identity-modal__title">設定</div></div>
+      <div class="settings-body" id="settingsBody"></div>
+      <button class="identity-modal__cancel" id="settingsClose">關閉</button>
+    </div>`;
+  document.body.appendChild(modal);
+  renderSettingsBody(modal.querySelector("#settingsBody"));
+  modal.querySelector("#settingsClose").addEventListener("click", () => modal.remove());
+  modal.querySelector(".identity-modal__backdrop").addEventListener("click", () => modal.remove());
+}
+
+function renderSettingsBody(body) {
+  const me = getMyMember();
+  if (!me) {
+    // 沒認領 → 提示先認領、不給改(規則4)
+    body.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-section__title">改名字</div>
+        <p class="settings-hint">你還沒認領身分,先選一個身分才能改名字。</p>
+        <button class="settings-save-btn" id="settingsPickIdentity">選擇我的身分</button>
+      </div>`;
+    body.querySelector("#settingsPickIdentity").addEventListener("click", () => {
+      document.getElementById("settingsSheet")?.remove();
+      openIdentityModal(() => openSettings());   // 認領完自動重開設定
+    });
+    return;
+  }
+  body.innerHTML = `
+    <div class="settings-section">
+      <div class="settings-section__title">改名字</div>
+      <input class="settings-input" id="settingsNameInput" type="text" maxlength="20" placeholder="輸入你的名字" />
+      <button class="settings-save-btn" id="settingsSaveName">儲存</button>
+    </div>`;
+  const input = body.querySelector("#settingsNameInput");
+  input.value = me.name || "";
+  body.querySelector("#settingsSaveName").addEventListener("click", () => saveMyName(input.value));
+}
+
+async function saveMyName(raw) {
+  const myId = getMyId();
+  if (!myId) { showToast("先認領身分才能改名"); return; }      // 防呆:沒認領不給改
+  const name = (raw || "").trim();
+  if (!name) { showToast("名字不能空白"); return; }            // 防呆:空白擋下
+  const initials = initialsOf(name);                          // 重算 initials(沿用既有)
+  const btn = document.getElementById("settingsSaveName");
+  if (btn) btn.disabled = true;
+  try {
+    await updateDoc(doc(db, "members", myId), { name, initials });
+    const me = allMembers.find(m => m.id === myId);            // 本地 cache 同步
+    if (me) { me.name = name; me.initials = initials; }
+    applyMyIdentity();                                         // nav 頭像即時反映
+    showToast("名字改好了");
+    document.getElementById("settingsSheet")?.remove();
+  } catch (e) {
+    console.warn("[settings] 改名失敗:", e && e.message ? e.message : e);
+    showToast("改名失敗、請再試");
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ============================================================
    7. 主流程
    ============================================================ */
 async function main() {
   bindBottomNav();
   initPhotoLightbox();   // 照片放大 lightbox(委派、綁一次;首頁/個人頁共用 post-likes.js 同一支)
+  document.getElementById("settingsBtn")?.addEventListener("click", openSettings);   // 6-4:齒輪開設定
 
   try {
     // 抓家族成員
