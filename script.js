@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu } from "./post-likes.js?v=12";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=13";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -91,17 +91,30 @@ function openIdentityModal(onPick) {
 
   // 建立成員列表
   const list = modal.querySelector("#identityList");
+  const myDeviceId = getDeviceId();
   allMembers.forEach(m => {
+    const claimedByOther = m.claimedByDeviceId && m.claimedByDeviceId !== myDeviceId;
     const row = document.createElement("button");
-    row.className = "identity-row";
+    row.className = "identity-row" + (claimedByOther ? " identity-row--claimed" : "");
     row.innerHTML = `
       <div class="identity-row__avatar">${m.initials || initialsOf(m.name)}</div>
       <div class="identity-row__text">
         <div class="identity-row__name">${m.name || "(未命名)"}</div>
         ${m.nickname ? `<div class="identity-row__nick">${m.nickname}</div>` : ""}
       </div>
+      ${claimedByOther ? `<span class="identity-row__badge">已認領</span>` : ""}
     `;
-    row.addEventListener("click", () => {
+    row.addEventListener("click", async () => {
+      // 6-3:認領(被別人認領則走救回);成功才套用身分(規則4:失敗不改 localStorage)
+      const r = await selectIdentity({ db, member: m, deviceId: myDeviceId, oldMemberId: getMyId(), showToast });
+      if (!r || !r.ok) return;
+      // 本地 cache 同步:釋放我原本認領的、標記新認領(下次開 modal 灰標才對)
+      const old = getMyId();
+      if (old && old !== m.id) {
+        const oldM = allMembers.find(x => x.id === old);
+        if (oldM && oldM.claimedByDeviceId === myDeviceId) oldM.claimedByDeviceId = null;
+      }
+      m.claimedByDeviceId = myDeviceId;
       setMyId(m.id);
       applyMyIdentity();
       modal.remove();

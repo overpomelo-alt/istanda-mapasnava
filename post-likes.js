@@ -7,7 +7,7 @@
    身分(我是誰)由各頁透過 callback 提供(getIdentity / ensureIdentity)、本模組不綁特定頁。
    ============================================================ */
 import {
-  doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, increment
+  doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, increment, runTransaction
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 function esc(s) {
@@ -793,4 +793,112 @@ export function wirePostDeleteMenu(opts) {
     onDelete: () => deletePostEverywhere(db, post, appsScriptUrl, showToast),
     showToast
   }));
+}
+
+/* ============================================================
+   身分認領(6-3 乙模式;首頁/個人頁兩份 modal 共用同一套、規則2)
+   - member doc 加 claimedByDeviceId:認領者 deviceId;一 member 一人。
+   - 認領/切換/釋放全走 runTransaction(唯一性語意、避免兩裝置搶 race)。
+   - 換機救回(邊角②)= forceClaim:比對 genealogyCode + name 全對才覆蓋(摩擦非鎖、非真 auth)。
+   ============================================================ */
+/* 核心交易:讀目標(+ 舊認領)→ 依 override 決定守門 → 釋放「屬於我的」舊認領 → 寫目標。
+   所有 tx.get 都在 tx.update 之前(Firestore 交易規則)。回 { ok, reason }、不 throw 業務錯。 */
+async function _claimTx(db, targetMemberId, deviceId, oldMemberId, opts) {
+  return await runTransaction(db, async (tx) => {
+    const targetRef = doc(db, "members", targetMemberId);
+    const targetSnap = await tx.get(targetRef);
+    if (!targetSnap.exists()) return { ok: false, reason: "not_found" };
+    const data = targetSnap.data();
+    const claimedBy = data.claimedByDeviceId || null;
+
+    // 先讀舊認領(若有、且不是同一個)——讀必須全在寫之前
+    let oldRef = null, oldSnap = null;
+    if (oldMemberId && oldMemberId !== targetMemberId) {
+      oldRef = doc(db, "members", oldMemberId);
+      oldSnap = await tx.get(oldRef);
+    }
+
+    // 守門
+    if (opts.override) {
+      // 邊角②:比對族譜碼 + 名字全對才放行(本人換機救回)
+      if ((data.genealogyCode || "") !== (opts.code || "").trim() ||
+          (data.name || "")          !== (opts.name || "").trim()) {
+        return { ok: false, reason: "mismatch" };
+      }
+    } else {
+      // 一般認領:被別人認領 → 擋(邊角①);空 或 已是我 → 放行(idempotent)
+      if (claimedBy && claimedBy !== deviceId) return { ok: false, reason: "claimed_by_other" };
+    }
+
+    // 寫:先釋放「確實屬於我」的舊認領(只清我的、別誤清別人的)、再寫目標
+    if (oldRef && oldSnap.exists() && (oldSnap.data().claimedByDeviceId || null) === deviceId) {
+      tx.update(oldRef, { claimedByDeviceId: null });
+    }
+    tx.update(targetRef, { claimedByDeviceId: deviceId });
+    return { ok: true };
+  });
+}
+
+/* 一般認領/切換:被別人認領會擋(回 reason:'claimed_by_other')。 */
+export function claimIdentity(db, targetMemberId, deviceId, oldMemberId) {
+  return _claimTx(db, targetMemberId, deviceId, oldMemberId, { override: false });
+}
+/* 換機救回:比對 genealogyCode + name,全對才覆蓋(不對回 reason:'mismatch')。 */
+export function forceClaimIdentity(db, targetMemberId, deviceId, oldMemberId, code, name) {
+  return _claimTx(db, targetMemberId, deviceId, oldMemberId, { override: true, code, name });
+}
+
+/* 邊角②救回流程 UI(順序照 spec:輸入 → 比對 → 全對才二次確認 → forceClaim)。
+   forceClaim 內再驗一次族譜碼+名字保原子(防讀後到寫之間被改);回 { ok, reason/cancelled }。 */
+export async function runReclaimFlow({ db, member, deviceId, oldMemberId, showToast }) {
+  const who = member.name || "這個身分";
+  const code = window.prompt(`「${who}」已經在另一支手機上。\n如果這是你本人換了手機,輸入你的族譜代碼救回(像 A-1 那樣):`);
+  if (code === null) return { ok: false, cancelled: true };
+  const name = window.prompt("再輸入你的中文名字(要跟族譜上的一樣):");
+  if (name === null) return { ok: false, cancelled: true };
+  // 先比對(對了才給二次確認):讀目標 member 的 genealogyCode + name
+  let d = {};
+  try {
+    const snap = await getDoc(doc(db, "members", member.id));
+    d = snap.exists() ? snap.data() : {};
+  } catch (e) {
+    console.warn("[claim] 救回讀取失敗:", e && e.message ? e.message : e);
+    if (showToast) showToast("救回失敗、請再試");
+    return { ok: false, reason: "error" };
+  }
+  if ((d.genealogyCode || "") !== code.trim() || (d.name || "") !== name.trim()) {
+    if (showToast) showToast("代碼或名字不對、請找管理員幫忙");
+    return { ok: false, reason: "mismatch" };
+  }
+  // 全對 → 二次確認 → 覆蓋(forceClaim 交易內再驗一次)
+  if (!window.confirm(`確定要把「${who}」改成用「這支」手機嗎?\n原本那支手機就會登出這個身分。`)) {
+    return { ok: false, cancelled: true };
+  }
+  try {
+    const r = await forceClaimIdentity(db, member.id, deviceId, oldMemberId, code, name);
+    if (!r.ok && showToast) showToast(r.reason === "mismatch" ? "代碼或名字不對、請找管理員幫忙" : "救回失敗、請再試");
+    return r;
+  } catch (e) {
+    console.warn("[claim] 救回失敗:", e && e.message ? e.message : e);
+    if (showToast) showToast("救回失敗、請再試");
+    return { ok: false, reason: "error" };
+  }
+}
+
+/* 兩份 modal 點選成員時共用入口:被別人認領 → 走救回流程;否則一般認領。
+   opts = { db, member, deviceId, oldMemberId, showToast }。回 { ok, ... }。 */
+export async function selectIdentity({ db, member, deviceId, oldMemberId, showToast }) {
+  const claimedByOther = member.claimedByDeviceId && member.claimedByDeviceId !== deviceId;
+  if (claimedByOther) {
+    return await runReclaimFlow({ db, member, deviceId, oldMemberId, showToast });
+  }
+  try {
+    const r = await claimIdentity(db, member.id, deviceId, oldMemberId);
+    if (!r.ok && showToast) showToast(r.reason === "claimed_by_other" ? "這個身分剛被別人認領了" : "認領失敗、請再試");
+    return r;
+  } catch (e) {
+    console.warn("[claim] 認領失敗:", e && e.message ? e.message : e);
+    if (showToast) showToast("認領失敗、請再試");
+    return { ok: false, reason: "error" };
+  }
 }

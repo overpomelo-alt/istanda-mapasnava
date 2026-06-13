@@ -635,6 +635,14 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
   color: var(--text-muted);
   margin-top: 2px;
 }
+/* 6-3:已被別的裝置認領的成員(點了走「換機救回」流程、不是完全不能點)*/
+.identity-row--claimed { opacity: 0.55; }
+.identity-row__badge {
+  flex-shrink: 0;
+  font-size: 11px; color: var(--text-muted);
+  background: var(--bg-soft); border: 1px solid var(--border);
+  border-radius: 10px; padding: 2px 8px; white-space: nowrap;
+}
 
 .identity-modal__cancel {
   width: 100%;

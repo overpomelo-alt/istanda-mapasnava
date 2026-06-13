@@ -10,7 +10,7 @@
   <meta name="theme-color" content="#ffffff" />
   <title>個人頁面 · Istanda Takiscipanan</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=13" />
 
   <!-- PWA(Task 6):路徑全相對 ./ -->
   <link rel="manifest" href="./manifest.json" />
@@ -1150,7 +1150,7 @@
       collection, addDoc, updateDoc, serverTimestamp, increment,
       query, where, orderBy, onSnapshot, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, buildDeleteMenu, deleteDriveFile } from "./post-likes.js?v=12";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
+    import { wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, buildDeleteMenu, deleteDriveFile, selectIdentity } from "./post-likes.js?v=13";   // 貼文互動共用(規則 2、寫入邏輯只在 post-likes.js)
 
     const firebaseConfig = {
       apiKey: "AIzaSyB2Ek81mDL1SGBe-6S6PHEs4M8a-H6PqzA",
@@ -2185,18 +2185,31 @@
       document.body.appendChild(modal);
 
       const list = modal.querySelector("#identityList");
+      const myDeviceId = getDeviceId();
       myCachedMembers.forEach(m => {
         const fallbackInitials = (m.name || "??").slice(0, 2).toUpperCase();
+        const claimedByOther = m.claimedByDeviceId && m.claimedByDeviceId !== myDeviceId;
         const row = document.createElement("button");
-        row.className = "identity-row";
+        row.className = "identity-row" + (claimedByOther ? " identity-row--claimed" : "");
         row.innerHTML = `
           <div class="identity-row__avatar">${escapeHtml(m.initials || fallbackInitials)}</div>
           <div class="identity-row__text">
             <div class="identity-row__name">${escapeHtml(m.name || "(未命名)")}</div>
             ${m.nickname ? `<div class="identity-row__nick">${escapeHtml(m.nickname)}</div>` : ""}
           </div>
+          ${claimedByOther ? `<span class="identity-row__badge">已認領</span>` : ""}
         `;
-        row.addEventListener("click", () => {
+        row.addEventListener("click", async () => {
+          // 6-3:認領(被別人認領則走救回);成功才套用身分(規則4)
+          const r = await selectIdentity({ db, member: m, deviceId: myDeviceId, oldMemberId: getMyId(), showToast });
+          if (!r || !r.ok) return;
+          // 本地 cache 同步:釋放我原本認領的、標記新認領
+          const old = getMyId();
+          if (old && old !== m.id) {
+            const oldM = myCachedMembers.find(x => x.id === old);
+            if (oldM && oldM.claimedByDeviceId === myDeviceId) oldM.claimedByDeviceId = null;
+          }
+          m.claimedByDeviceId = myDeviceId;
           setMyId(m.id);
           modal.remove();
           if (typeof onPick === "function") onPick(m);
