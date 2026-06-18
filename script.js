@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=21";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=22";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -742,14 +742,21 @@ async function handleAvatarFile(fileInput, pickBtn) {
   const file = fileInput.files && fileInput.files[0];
   fileInput.value = "";                       // 重置、同一張可再選
   if (!file) return;
-  try { await file.arrayBuffer(); }           // 守門:雲端 proxy 讀不到 → 友善提示、不續(規則4)
+  // 守門 + 留 bytes:只讀一次 picker File 的 bytes(規則4:雲端 proxy / Android Photo Picker
+  // NotReadableError 在此攔下、友善提示不續)。讀成功後建記憶體 Blob 副本,後續解碼/壓縮全吃這顆,
+  // 不再重讀原始 content:// File → 消掉「同圖時好時壞」的間歇重讀失敗。
+  let stableBlob;
+  try {
+    const buf = await file.arrayBuffer();
+    stableBlob = new Blob([buf], { type: file.type || "image/jpeg" });
+  }
   catch (e) { showToast("這張照片讀不到,換一張或用相機拍"); return; }
   const myId = getMyId();
   if (!myId) return;
   const orig = pickBtn.textContent;
   pickBtn.disabled = true; pickBtn.textContent = "上傳中…";
   try {
-    const blob = await compressAvatar(file);
+    const blob = await compressAvatar(stableBlob);
     const newFileId = await uploadBlobToDrive(blob, `${myId}.jpg`);
     const me = getMyMember();
     const oldFileId = me ? (me.avatarFileId || null) : null;
