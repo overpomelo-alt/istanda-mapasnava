@@ -283,8 +283,8 @@ img { display: block; max-width: 100%; }
 .post {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-lg);          /* step 4:12→16,跟設定卡 / story 圈同圓角階 */
+  box-shadow: var(--shadow-card);           /* step 4:弱硬寫陰影 → 統一深度語言(浮起)*/
   overflow: hidden;
 }
 
