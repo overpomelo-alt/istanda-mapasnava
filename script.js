@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=22";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=23";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -767,8 +767,8 @@ async function handleAvatarFile(fileInput, pickBtn) {
     if (oldFileId) deleteDriveFile(APPS_SCRIPT_URL, oldFileId).catch(() => {});   // 背景清舊孤兒檔
     showToast("頭貼更新了 🌿");
   } catch (e) {
-    console.error("[avatar]", e);   // TODO 6-4 診斷:真機根因查完後移除、toast 改回友善文案
-    showToast("上傳失敗:" + (e && e.message ? e.message : String(e)));   // TODO 6-4 診斷:暫時吐真錯誤
+    console.warn("[avatar] 上傳失敗:", e && e.message ? e.message : e);
+    showToast("上傳失敗,等一下再試");
     pickBtn.disabled = false; pickBtn.textContent = orig;   // 失敗:鈕復原、avatarFileId 不動
   }
 }
