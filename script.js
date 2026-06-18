@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=20";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=21";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -594,43 +594,115 @@ function applyFontScale(scale) {
   try { localStorage.setItem("istanda_font_scale", v); } catch (e) {}
 }
 
-/* 6-4 頭貼:壓縮(長邊縮 400、保比例、不強制方形、jpeg;圓裁交給 CSS)。
-   解碼沿用 member.html 發照片那套耐操路徑(規則 2,技術照搬):
-   objectURL → 塞 DOM 的隱藏 <img> → 等 onload(naturalWidth>0)→ drawImage 已顯示的 img。
-   繞過 createImageBitmap —— 部分 Android「同張圖 <img> 顯示得出來、createImageBitmap 卻
-   EncodingError(The source image could not be decoded)」,改畫已顯示的 img 才穩。
-   EXIF orientation 不手動解析:瀏覽器渲染 <img> 時自動套用、drawImage 直接烤進方向。 */
-async function compressAvatar(file) {
-  const MAX = 400;
+/* 6-4 頭貼解碼:原樣搬 member.html 發照片的 loadRawImage 四層鏈(規則 2,技術照搬)。
+   依序試 Path 0 img.decode(objectURL)→ Path 1 createImageBitmap → Path 2 DOM <img>+objectURL
+   → Path 3 FileReader.readAsDataURL → <img>;任一層成功就回傳、全掛才 throw。
+   真機證據:部分 Android(Samsung)blob: objectURL 餵 <img> 解碼失敗、只有 data: URL(Path 3)能解。
+   每個 loader 回 { source, w, h, cleanup };cleanup 由 compressAvatar 在 drawImage 用完後呼叫。 */
+const AVATAR_LOAD_TIMEOUT_MS = 5000;
+
+function avatarLoadViaDecode(file) {
   const url = URL.createObjectURL(file);
   const img = document.createElement("img");
-  img.style.cssText = "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none;";
-  img.src = url;
-  document.body.appendChild(img);
-  try {
-    await new Promise((res, rej) => {
-      if (img.complete && img.naturalWidth > 0) { res(); return; }
-      const t = setTimeout(() => rej(new Error("DISPLAY_IMG_TIMEOUT")), 15000);
-      img.addEventListener("load", () => {
-        clearTimeout(t);
-        if (img.naturalWidth > 0) res(); else rej(new Error("DISPLAY_IMG_ZERO_DIM"));
-      });
-      img.addEventListener("error", () => { clearTimeout(t); rej(new Error("DISPLAY_IMG_ONERROR")); });
+  img.style.cssText = "position:absolute;left:-99999px;top:0;width:auto;height:auto;visibility:hidden;pointer-events:none;";
+  img.src = url;                       // src 先設、decode() 前才能解碼
+  document.body.appendChild(img);      // DOM-attached 較易解碼
+  return img.decode().then(() => ({
+    source: img, w: img.naturalWidth, h: img.naturalHeight,
+    cleanup: () => { if (img.parentNode) img.parentNode.removeChild(img); URL.revokeObjectURL(url); }
+  })).catch((e) => {
+    if (img.parentNode) img.parentNode.removeChild(img);   // 規則 5:失敗也立刻釋放
+    URL.revokeObjectURL(url);
+    throw new Error("DECODE_FAILED: " + (e && e.message ? e.message : e));
+  });
+}
+
+function avatarLoadViaObjectURL(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = document.createElement("img");
+    img.style.cssText = "position:absolute;left:-99999px;top:0;width:auto;height:auto;visibility:hidden;pointer-events:none;";
+    document.body.appendChild(img);
+    let settled = false;
+    const removeImg = () => { if (img.parentNode) img.parentNode.removeChild(img); };
+    const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
+    const t = setTimeout(() => finish(() => {
+      removeImg(); URL.revokeObjectURL(url);
+      reject(new Error("IMAGE_LOAD_FAILED: timeout " + AVATAR_LOAD_TIMEOUT_MS + "ms"));
+    }), AVATAR_LOAD_TIMEOUT_MS);
+    img.onload = () => finish(() => resolve({
+      source: img, w: img.naturalWidth, h: img.naturalHeight,
+      cleanup: () => { removeImg(); URL.revokeObjectURL(url); }
+    }));
+    img.onerror = () => finish(() => {
+      removeImg(); URL.revokeObjectURL(url);
+      reject(new Error("IMAGE_LOAD_FAILED: onerror"));
     });
-    const iw = img.naturalWidth, ih = img.naturalHeight;
+    img.src = url;                       // src 擺最後、listener 先綁
+  });
+}
+
+function avatarLoadViaFileReader(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("FILEREADER_FAILED: reader.onerror"));
+    reader.onload = () => {
+      const rlen = reader.result ? reader.result.length : 0;
+      if (!reader.result || rlen < 100) { reject(new Error("FR_EMPTY_RESULT: " + (reader.result ? rlen : "null"))); return; }
+      const img = document.createElement("img");
+      let settled = false;
+      const finish = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
+      const t = setTimeout(() => finish(() => reject(new Error("FILEREADER_FAILED: dataURL img timeout " + AVATAR_LOAD_TIMEOUT_MS + "ms"))), AVATAR_LOAD_TIMEOUT_MS);
+      img.onload = () => finish(() => resolve({ source: img, w: img.naturalWidth, h: img.naturalHeight, cleanup: () => {} }));   // dataURL 不需 revoke
+      img.onerror = () => finish(() => reject(new Error("FILEREADER_FAILED: dataURL img onerror")));
+      img.src = reader.result;
+    };
+    try { reader.readAsDataURL(file); }
+    catch (e) { reject(new Error("FILEREADER_FAILED: " + (e && e.message ? e.message : e))); }
+  });
+}
+
+async function avatarLoadRawImage(file) {
+  // Path 0: img.decode()(瀏覽器原生解碼、最優先)
+  if (typeof HTMLImageElement !== "undefined" && typeof HTMLImageElement.prototype.decode === "function") {
+    try { return await avatarLoadViaDecode(file); }
+    catch (e) { console.warn("[avatar] DECODE_FAILED、退 createImageBitmap", e && e.message ? e.message : e); }
+  }
+  // Path 1: createImageBitmap
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(file);   // 預設 imageOrientation:'from-image'、已依 EXIF 轉正
+      return { source: bmp, w: bmp.width, h: bmp.height, cleanup: () => { if (bmp.close) bmp.close(); } };
+    } catch (e) { console.warn("[avatar] BITMAP_FAILED、退 DOM img", e && e.message ? e.message : e); }
+  }
+  // Path 2: DOM-attached <img> + objectURL
+  try { return await avatarLoadViaObjectURL(file); }
+  catch (e) { console.warn("[avatar] IMAGE_LOAD_FAILED、退 FileReader", e && e.message ? e.message : e); }
+  // Path 3: FileReader → dataURL → <img>(最後一層、相容性最高)
+  return await avatarLoadViaFileReader(file);
+}
+
+/* 6-4 頭貼:壓縮(長邊縮 400、保比例、不強制方形、jpeg;圓裁交給 CSS)。
+   解碼走 avatarLoadRawImage 四層鏈;拿到 source(img / ImageBitmap)後 drawImage 進 400 canvas。
+   EXIF orientation:Path 0/2/3 走 <img> 由瀏覽器渲染自動套向、Path 1 createImageBitmap 預設依 EXIF 轉正。 */
+async function compressAvatar(file) {
+  const MAX = 400;
+  const raw = await avatarLoadRawImage(file);   // { source, w, h, cleanup }
+  try {
+    const iw = raw.w, ih = raw.h;
+    if (!iw || !ih) throw new Error("IMG_NOT_READY");
     const scale = Math.min(1, MAX / Math.max(iw, ih));
     const w = Math.max(1, Math.round(iw * scale));
     const h = Math.max(1, Math.round(ih * scale));
     const canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
-    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    canvas.getContext("2d").drawImage(raw.source, 0, 0, w, h);
     const blob = await new Promise((res, rej) =>
       canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob 失敗")), "image/jpeg", 0.85));
     canvas.width = canvas.height = 0;   // 規則 5:畫完釋放 canvas 記憶體
     return blob;
   } finally {
-    if (img.parentNode) img.parentNode.removeChild(img);
-    URL.revokeObjectURL(url);
+    if (raw.cleanup) raw.cleanup();      // 移除暫存 img + revokeObjectURL / close bitmap
   }
 }
 

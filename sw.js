@@ -2,7 +2,7 @@
    原則:相對路徑 / JS-CSS 不預快取 / 動態資料 network-only / cache 前綴 istanda-cache-
    bump 規則:改前端 ?v= 時,CACHE_VERSION 同步 +1
 */
-const CACHE_VERSION = 'istanda-v20';
+const CACHE_VERSION = 'istanda-v21';
 const CACHE_NAME = `istanda-cache-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
