@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=19";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=20";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -594,21 +594,44 @@ function applyFontScale(scale) {
   try { localStorage.setItem("istanda_font_scale", v); } catch (e) {}
 }
 
-/* 6-4 頭貼:壓縮(長邊縮 400、保比例、不強制方形、jpeg;圓裁交給 CSS)*/
+/* 6-4 頭貼:壓縮(長邊縮 400、保比例、不強制方形、jpeg;圓裁交給 CSS)。
+   解碼沿用 member.html 發照片那套耐操路徑(規則 2,技術照搬):
+   objectURL → 塞 DOM 的隱藏 <img> → 等 onload(naturalWidth>0)→ drawImage 已顯示的 img。
+   繞過 createImageBitmap —— 部分 Android「同張圖 <img> 顯示得出來、createImageBitmap 卻
+   EncodingError(The source image could not be decoded)」,改畫已顯示的 img 才穩。
+   EXIF orientation 不手動解析:瀏覽器渲染 <img> 時自動套用、drawImage 直接烤進方向。 */
 async function compressAvatar(file) {
   const MAX = 400;
-  let bitmap;
-  try { bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }); }
-  catch (e) { bitmap = await createImageBitmap(file); }   // 舊瀏覽器無 imageOrientation 選項
-  const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
-  const w = Math.max(1, Math.round(bitmap.width * scale));
-  const h = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = w; canvas.height = h;
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
-  if (bitmap.close) bitmap.close();
-  return await new Promise((res, rej) =>
-    canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob 失敗")), "image/jpeg", 0.85));
+  const url = URL.createObjectURL(file);
+  const img = document.createElement("img");
+  img.style.cssText = "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none;";
+  img.src = url;
+  document.body.appendChild(img);
+  try {
+    await new Promise((res, rej) => {
+      if (img.complete && img.naturalWidth > 0) { res(); return; }
+      const t = setTimeout(() => rej(new Error("DISPLAY_IMG_TIMEOUT")), 15000);
+      img.addEventListener("load", () => {
+        clearTimeout(t);
+        if (img.naturalWidth > 0) res(); else rej(new Error("DISPLAY_IMG_ZERO_DIM"));
+      });
+      img.addEventListener("error", () => { clearTimeout(t); rej(new Error("DISPLAY_IMG_ONERROR")); });
+    });
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const scale = Math.min(1, MAX / Math.max(iw, ih));
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    const blob = await new Promise((res, rej) =>
+      canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob 失敗")), "image/jpeg", 0.85));
+    canvas.width = canvas.height = 0;   // 規則 5:畫完釋放 canvas 記憶體
+    return blob;
+  } finally {
+    if (img.parentNode) img.parentNode.removeChild(img);
+    URL.revokeObjectURL(url);
+  }
 }
 
 /* 重繪設定頁「頭貼」區塊(預覽 + 鈕);初始與每次變更後都呼叫 */
