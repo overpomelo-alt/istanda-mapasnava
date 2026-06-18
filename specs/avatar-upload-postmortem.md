@@ -48,5 +48,5 @@
 - v22 改吃 in-memory Blob 副本（根治間歇 NotReadableError）
 
 ## 相關
-- 參見 `android-photo-picker-postmortem.md`（同一個 NotReadableError 根源）。
+- NotReadableError 完整證據鏈見 `specs/current-status.md`（2026-05-29 決策記錄），摘要見 `specs/task-feed.md` L598。
 - 待辦：v22 仍保留診斷碼 + 暫時錯誤 toast，4a 收尾尚差一版「移除診斷碼 + 還原友善文案」。
