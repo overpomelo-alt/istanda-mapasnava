@@ -27,6 +27,7 @@
 
   /* ===== 強調色 ===== */
   --accent:       #d4a017;   /* 薑黃(取代 v1 粉紅 #e85a8a) */
+  --settings-accent: var(--bunun-green);   /* 設定頁專用主色(布農綠 #4a6b3a;只設定頁、不動全站 --accent) */
 
   /* ===== 邊框 ===== */
   --border:       #e4ddd0;   /* 米色淡邊框 */
@@ -701,7 +702,7 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
 .settings-save-btn {
   width: 100%; height: var(--settings-control-h);
   font-size: 17px; font-weight: 600; color: #fff;
-  background: var(--accent); border: none; border-radius: var(--radius-md);
+  background: var(--settings-accent); border: none; border-radius: var(--radius-md);   /* A:薑黃→布農綠 */
   cursor: pointer;
 }
 .settings-save-btn:disabled { opacity: 0.6; cursor: default; }
@@ -716,7 +717,7 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
   line-height: 1;
 }
 .settings-size-btn--on {
-  color: #fff; background: var(--accent); border-color: var(--accent);
+  color: #fff; background: var(--settings-accent); border-color: var(--settings-accent);   /* A:薑黃→布農綠 */
 }
 
 /* 視覺地基 step 2(C):設定頁殼 + 控制項節奏 — 全鎖 #settingsSheet、不污染「我是誰」modal、不碰五色/紅/月亮 */
@@ -729,8 +730,8 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
 }
 #settingsSheet .settings-input:focus,
 #settingsSheet .settings-textarea:focus {
-  outline: none; border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(212,160,23,.18);   /* 薑黃(--accent)淡光暈聚焦回饋 */
+  outline: none; border-color: var(--settings-accent);
+  box-shadow: 0 0 0 3px rgba(74,107,58,.20);   /* A:布農綠(#4a6b3a)淡光暈聚焦回饋 */
 }
 
 /* 6-4 頭貼:nav 我的頭貼 img + 設定預覽圓(圓裁交給 CSS、沿用既有頭像圓/灰底、不新增紅)*/
