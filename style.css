@@ -70,6 +70,17 @@
 
   /* 6-4 介面大小:整頁 zoom 倍率(單一來源;JS 只切 data-font-scale、不散落數字)*/
   --ui-zoom: 1;            /* 標準 */
+
+  /* ============================================================
+     視覺地基 step 1:結構 token(additive、定義不套用、零視覺變化)
+     只留現有沒有的;重複的(文字階用 --text*、--r-sm/--r/--r-lg=--radius-sm/md/lg、
+     --surface=--bg-elevated)不重造。不碰五色 / 紅 / 月亮。
+     ============================================================ */
+  --radius-xl: 22px;   /* 既有只到 --radius-lg 16px,補一階 */
+  --shadow-card:  0 1px 2px rgba(43,39,34,.05), 0 8px 20px -10px rgba(43,39,34,.14);
+  --shadow-sheet: 0 -10px 30px -12px rgba(43,39,34,.30);
+  /* 暖白:⚠ 現有 --bg(#fafaf7)已全站使用,覆寫會改視覺,故不動;暫存 --bg-warm、step 2 再決定遷移 */
+  --bg-warm: #FAF8F3;
 }
 :root[data-font-scale="large"]  { --ui-zoom: 1.12; }   /* 大 */
 :root[data-font-scale="xlarge"] { --ui-zoom: 1.25; }   /* 特大(保守上限、避免破版)*/
@@ -660,14 +671,17 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
 /* 6-4 設定頁(殼沿用 .identity-modal overlay;這裡只加內容欄位樣式)*/
 .settings-body {
   flex: 1; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+  display: flex; flex-direction: column; gap: 14px; margin-bottom: 12px;
 }
+/* 視覺地基 step 2(C):section 卡片化 — 白卡浮在暖白 sheet 上,取代原細線分隔 */
 .settings-section {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
-.settings-section:last-child { border-bottom: none; }
 .settings-section__title { font-size: 14px; font-weight: 700; color: var(--text); }
 .settings-hint { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 .settings-input {
@@ -702,6 +716,20 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
 }
 .settings-size-btn--on {
   color: #fff; background: var(--accent); border-color: var(--accent);
+}
+
+/* 視覺地基 step 2(C):設定頁殼 + 控制項節奏 — 全鎖 #settingsSheet、不污染「我是誰」modal、不碰五色/紅/月亮 */
+#settingsSheet .identity-modal__panel {
+  background: var(--bg-warm);          /* 暖白 sheet 底、白卡浮其上 */
+  box-shadow: var(--shadow-sheet);     /* 較紮實的上滑陰影 */
+}
+#settingsSheet .settings-section__title {
+  font-size: 15px; letter-spacing: 0.01em; margin-bottom: 2px;
+}
+#settingsSheet .settings-input:focus,
+#settingsSheet .settings-textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(212,160,23,.18);   /* 薑黃(--accent)淡光暈聚焦回饋 */
 }
 
 /* 6-4 頭貼:nav 我的頭貼 img + 設定預覽圓(圓裁交給 CSS、沿用既有頭像圓/灰底、不新增紅)*/
