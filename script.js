@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=23";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=24";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -59,12 +59,9 @@ function applyMyIdentity() {
   const me = getMyMember();
   const navAvatar = document.querySelector(".nav-avatar");
   if (!navAvatar) return;
-  if (me && me.avatarFileId) {
-    // 6-4:有頭貼 → 放 <img>(經 loadCardPhoto 抓圖、CSS object-fit:cover 圓裁)
-    navAvatar.innerHTML = `<img class="nav-avatar__img" data-photo-fileid="${me.avatarFileId}" alt="" />`;
-    loadCardPhoto(navAvatar.querySelector("img"));
-  } else if (me) {
-    navAvatar.textContent = me.initials || initialsOf(me.name);
+  if (me) {
+    navAvatar.innerHTML = renderMemberAvatar(me);   // 4b:共用頭貼渲染(有 avatarFileId→img 走快取、否則 initials)
+    hydrateAvatars(navAvatar);
   } else {
     navAvatar.textContent = "ME";
   }
@@ -173,7 +170,7 @@ async function renderStories(members) {
       <div class="story__ring-wrap">
         <div class="story__ring ${isViewed ? 'story__ring--viewed' : ''}">
           <div class="story__inner">
-            <div class="story__avatar">${m.initials || initialsOf(m.name)}</div>
+            <div class="story__avatar">${renderMemberAvatar(m)}</div>
           </div>
         </div>
       </div>
@@ -193,6 +190,8 @@ async function renderStories(members) {
 
     scroll.appendChild(story);
   });
+
+  hydrateAvatars(scroll);   // 4b:story 列頭貼補載(有頭貼→img 走快取、無→已是 initials)
 }
 
 function createAddStory() {
@@ -294,6 +293,54 @@ async function loadCardPhoto(imgEl) {
   }
 }
 
+/* ============================================================
+   6-4 Block 4b:成員頭貼共用渲染 + per-fileId 記憶體快取(story 列 + 貼文作者共用)
+   - renderMemberAvatar(member):有 avatarFileId → <img>(走 avatar 快取載入、object-fit:cover 圓裁,
+     沿用 4a 頭貼樣式);否則 initials(沿用 initialsOf)。回傳塞進既有圓圈容器的 HTML;
+     插入 DOM 後呼叫 hydrateAvatars(root) 補載圖。
+   - 快取 Promise(session 級):每顆頭貼整顆 session 只抓一次,重繪 / 同一人重複出現 / 並發渲染
+     都吃快取——守「重用已載入、不重打 Apps Script」。沒 avatarFileId → initials、零請求。
+   ============================================================ */
+const avatarCache = new Map();   // fileId → Promise<dataURL>(重用已載入、不重打 Apps Script)
+
+function renderMemberAvatar(member) {
+  const initials = escapeHtml((member && (member.initials || initialsOf(member.name))) || "??");
+  const fid = member && member.avatarFileId;
+  if (!fid) return initials;   // 無頭貼 → initials、不發任何請求(零成本)
+  return `<img class="member-avatar__img" data-avatar-fileid="${escapeHtml(fid)}" data-initials="${initials}" alt="" />`;
+}
+
+function fetchAvatarDataUrl(fileId) {
+  let p = avatarCache.get(fileId);
+  if (p) return p;   // 命中快取(含 in-flight),不再打 Apps Script
+  p = (async () => {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?id=${encodeURIComponent(fileId)}`);   // 沿用 ?id= 代理(同 loadCardPhoto)
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const base64 = await resp.text();
+    if (!base64 || base64.length < 50) throw new Error("empty");
+    return `data:image/jpeg;base64,${base64}`;   // 頭貼一律 jpeg(壓縮端輸出 image/jpeg)
+  })();
+  avatarCache.set(fileId, p);
+  return p;
+}
+
+async function loadAvatarImg(imgEl) {
+  const fileId = imgEl.getAttribute("data-avatar-fileid");
+  if (!fileId) return;
+  try {
+    imgEl.src = await fetchAvatarDataUrl(fileId);
+  } catch (err) {
+    avatarCache.delete(fileId);   // 失敗不黏快取、下次重繪可重試
+    console.warn("[avatar] 頭貼載入失敗 fileId=" + fileId, err && err.message ? err.message : err);
+    const fallback = imgEl.getAttribute("data-initials");   // 退回 initials、避免空圓圈(規則 4)
+    if (fallback && imgEl.parentNode) imgEl.parentNode.textContent = fallback;
+  }
+}
+
+function hydrateAvatars(root) {
+  (root || document).querySelectorAll("img[data-avatar-fileid]").forEach(loadAvatarImg);
+}
+
 function createPostCard(post, membersMap, deviceId) {
   const article = document.createElement("article");
   article.className = "post";
@@ -321,7 +368,7 @@ function createPostCard(post, membersMap, deviceId) {
     <header class="post__header">
       <div class="post__user">
         <div class="post__avatar-ring"><div class="post__avatar-inner">
-          <div class="post__avatar">${escapeHtml(authorInitials)}</div>
+          <div class="post__avatar">${renderMemberAvatar(author)}</div>
         </div></div>
         <div class="post__meta">
           <span class="post__name">${escapeHtml(authorName)}</span>
@@ -386,6 +433,8 @@ function createPostCard(post, membersMap, deviceId) {
 
   // ⋯ 刪除選單(6-2:只在自己貼文 memberId===getMyId() 時掛、首頁/個人頁共用一支)
   wirePostDeleteMenu({ article, post, db, getMyId, appsScriptUrl: APPS_SCRIPT_URL, showToast });
+
+  hydrateAvatars(article);   // 4b:作者頭貼補載(走快取、同一人重複出現只抓一次)
 
   return article;
 }

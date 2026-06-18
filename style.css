@@ -707,6 +707,8 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
 /* 6-4 頭貼:nav 我的頭貼 img + 設定預覽圓(圓裁交給 CSS、沿用既有頭像圓/灰底、不新增紅)*/
 .nav-avatar { overflow: hidden; }
 .nav-avatar__img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+/* 4b:成員頭貼共用 img(story 列 / 貼文作者 / nav 共用;填滿既有圓圈、不動圈的顏色/ring) */
+.member-avatar__img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
 .settings-avatar-row { display: flex; align-items: center; gap: 14px; }
 .settings-avatar-preview {
   width: 64px; height: 64px; flex-shrink: 0;
