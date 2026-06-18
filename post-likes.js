@@ -15,6 +15,9 @@ function esc(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// Apps Script 端點(6-4 頭貼 uploadBlobToDrive 用;跟前端各頁同一條 /exec)
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxAglNgdZo-KCyRaOYWRjrNhIQvjRC8exQn_ATqX7ozvTCKRsCTqLsWwAJDVEcKZQYnoQ/exec";
+
 // 裝置識別:跟 member.html Task 3 同一個 localStorage key、確保同一台手機跨頁按讚一致
 const DEVICE_ID_KEY = "istanda_device_id";
 export function getDeviceId() {
@@ -735,6 +738,40 @@ export async function deleteDriveFile(appsScriptUrl, fileId) {
   const data = await resp.json();
   if (!data || !data.ok) throw new Error((data && data.error) || "delete failed");
   return data;
+}
+
+/* 上傳任意 blob 到 Drive、回 fileId(6-4 頭貼用)。
+   照搬 member.html 的 D-approach(規則2,只搬成共用、邏輯不改):
+   seed 既有 fileId → blind POST(跨域 redirect body 不解析)→ ?action=list 差集撈新 fileId(retry 3)。
+   filename 形如 `${memberId}.jpg`;後端改存 `${memberId}_<ts>.jpg`、list 依前綴 memberId 分組。
+   走無 folderId 的保底路徑(頭貼端不知 driveFolderId)。 */
+export async function uploadBlobToDrive(blob, filename) {
+  const memberId = String(filename).split(".")[0];
+  // seed:把該成員現有檔的 fileId 全收進 claimed(避免把舊檔誤當這次新上傳)
+  const claimed = [];
+  try {
+    const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+    const data = await resp.json();
+    ((data && data.result && data.result[memberId]) || []).forEach(f => { if (f.fileId) claimed.push(f.fileId); });
+  } catch (e) { console.warn("[upload] seed list 失敗、claimed 從空開始", e && e.message ? e.message : e); }
+  // blind POST(後端 key 是 "audio"、從副檔名推 mimeType)
+  const base64 = await blobToBase64(blob);
+  await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify({ audio: base64, filename, memberId, memberName: "", folderId: "" })
+  });
+  await new Promise(r => setTimeout(r, 300));   // 給 Drive 寫入緩衝、降 race(同 member.html)
+  // claim:retry 3 次、撈第一筆不在 claimed 的新 fileId
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const resp = await fetch(`${APPS_SCRIPT_URL}?action=list`);
+      const data = await resp.json();
+      const fresh = ((data && data.result && data.result[memberId]) || []).find(f => f.fileId && !claimed.includes(f.fileId));
+      if (fresh) return fresh.fileId;
+    } catch (e) { console.warn("[upload] claim GET 失敗、retry " + attempt, e && e.message ? e.message : e); }
+    if (attempt < 3) await new Promise(r => setTimeout(r, 500));
+  }
+  throw new Error("CLAIM_FAILED");
 }
 
 /* 通用「⋯ 刪除選單」元件(規則2:貼文/錄音共用)。回傳 .post__menu wrap、呼叫端自行 append。

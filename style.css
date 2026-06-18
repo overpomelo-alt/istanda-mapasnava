@@ -704,6 +704,26 @@ body.lightbox-open { overflow: hidden; }   /* 開啟時鎖背景捲動 */
   color: #fff; background: var(--accent); border-color: var(--accent);
 }
 
+/* 6-4 頭貼:nav 我的頭貼 img + 設定預覽圓(圓裁交給 CSS、沿用既有頭像圓/灰底、不新增紅)*/
+.nav-avatar { overflow: hidden; }
+.nav-avatar__img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+.settings-avatar-row { display: flex; align-items: center; gap: 14px; }
+.settings-avatar-preview {
+  width: 64px; height: 64px; flex-shrink: 0;
+  border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #4a4a4a, #6b6b6b);
+  color: #fff; font-size: 18px; font-weight: 600;
+}
+.settings-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.settings-avatar-actions { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.settings-remove-btn {
+  width: 100%; height: var(--settings-control-h);
+  font-size: 15px; font-weight: 600; color: var(--text-soft);
+  background: var(--bg-soft); border: 1px solid var(--border);
+  border-radius: var(--radius-md); cursor: pointer;
+}
+
 .identity-modal__cancel {
   width: 100%;
   padding: 12px;

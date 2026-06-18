@@ -13,7 +13,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/fireba
 import {
   getFirestore, collection, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, query, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity } from "./post-likes.js?v=17";   // 貼文互動共用(規則 2)
+import { getDeviceId, wireLikeButton, wireCommentButton, wireShareButton, getDeepLinkPostId, clearDeepLinkPostId, initPhotoLightbox, wirePostDeleteMenu, selectIdentity, uploadBlobToDrive, deleteDriveFile } from "./post-likes.js?v=18";   // 貼文互動共用(規則 2)
 
 /* ===== Firebase 設定 (istanda-mapasnava 專案) ===== */
 const firebaseConfig = {
@@ -58,9 +58,14 @@ function getMyMember() {
 function applyMyIdentity() {
   const me = getMyMember();
   const navAvatar = document.querySelector(".nav-avatar");
-  if (me && navAvatar) {
+  if (!navAvatar) return;
+  if (me && me.avatarFileId) {
+    // 6-4:有頭貼 → 放 <img>(經 loadCardPhoto 抓圖、CSS object-fit:cover 圓裁)
+    navAvatar.innerHTML = `<img class="nav-avatar__img" data-photo-fileid="${me.avatarFileId}" alt="" />`;
+    loadCardPhoto(navAvatar.querySelector("img"));
+  } else if (me) {
     navAvatar.textContent = me.initials || initialsOf(me.name);
-  } else if (navAvatar) {
+  } else {
     navAvatar.textContent = "ME";
   }
 }
@@ -589,6 +594,105 @@ function applyFontScale(scale) {
   try { localStorage.setItem("istanda_font_scale", v); } catch (e) {}
 }
 
+/* 6-4 頭貼:壓縮(長邊縮 400、保比例、不強制方形、jpeg;圓裁交給 CSS)*/
+async function compressAvatar(file) {
+  const MAX = 400;
+  let bitmap;
+  try { bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch (e) { bitmap = await createImageBitmap(file); }   // 舊瀏覽器無 imageOrientation 選項
+  const scale = Math.min(1, MAX / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+  if (bitmap.close) bitmap.close();
+  return await new Promise((res, rej) =>
+    canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob 失敗")), "image/jpeg", 0.85));
+}
+
+/* 重繪設定頁「頭貼」區塊(預覽 + 鈕);初始與每次變更後都呼叫 */
+function renderAvatarSection() {
+  const sec = document.getElementById("settingsAvatarSection");
+  if (!sec) return;
+  const me = getMyMember();
+  const fid = me ? (me.avatarFileId || null) : null;
+  sec.innerHTML = `
+    <div class="settings-section__title">頭貼</div>
+    <div class="settings-avatar-row">
+      <div class="settings-avatar-preview" id="settingsAvatarPreview"></div>
+      <div class="settings-avatar-actions">
+        <button class="settings-save-btn" id="settingsAvatarPick">選擇照片</button>
+        ${fid ? `<button class="settings-remove-btn" id="settingsAvatarRemove">移除頭貼</button>` : ""}
+      </div>
+    </div>
+    <input type="file" accept="image/*" id="settingsAvatarInput" class="visually-hidden" />`;
+  const prev = sec.querySelector("#settingsAvatarPreview");
+  if (fid) {
+    prev.innerHTML = `<img class="settings-avatar-img" data-photo-fileid="${fid}" alt="" />`;
+    loadCardPhoto(prev.querySelector("img"));   // 6-4 第3點:既有 fileId→影像機制
+  } else {
+    prev.textContent = (me && (me.initials || initialsOf(me.name))) || "?";
+  }
+  const input = sec.querySelector("#settingsAvatarInput");
+  const pick = sec.querySelector("#settingsAvatarPick");
+  pick.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => handleAvatarFile(input, pick));
+  const rm = sec.querySelector("#settingsAvatarRemove");
+  if (rm) rm.addEventListener("click", () => removeAvatar(rm));
+}
+
+/* 選照片 → arrayBuffer 守門 → 壓縮 → 上傳 → 寫 avatarFileId → 重繪 nav/預覽 → 清舊孤兒檔 */
+async function handleAvatarFile(fileInput, pickBtn) {
+  const file = fileInput.files && fileInput.files[0];
+  fileInput.value = "";                       // 重置、同一張可再選
+  if (!file) return;
+  try { await file.arrayBuffer(); }           // 守門:雲端 proxy 讀不到 → 友善提示、不續(規則4)
+  catch (e) { showToast("這張照片讀不到,換一張或用相機拍"); return; }
+  const myId = getMyId();
+  if (!myId) return;
+  const orig = pickBtn.textContent;
+  pickBtn.disabled = true; pickBtn.textContent = "上傳中…";
+  try {
+    const blob = await compressAvatar(file);
+    const newFileId = await uploadBlobToDrive(blob, `${myId}.jpg`);
+    const me = getMyMember();
+    const oldFileId = me ? (me.avatarFileId || null) : null;
+    await updateDoc(doc(db, "members", myId), { avatarFileId: newFileId });
+    if (me) me.avatarFileId = newFileId;      // 本地 cache
+    applyMyIdentity();                         // 重繪 nav 我的頭貼
+    renderAvatarSection();                      // 重繪設定預覽 + 「移除頭貼」鈕
+    if (oldFileId) deleteDriveFile(APPS_SCRIPT_URL, oldFileId).catch(() => {});   // 背景清舊孤兒檔
+    showToast("頭貼更新了 🌿");
+  } catch (e) {
+    console.warn("[avatar] 上傳失敗:", e && e.message ? e.message : e);
+    showToast("上傳失敗,等一下再試");
+    pickBtn.disabled = false; pickBtn.textContent = orig;   // 失敗:鈕復原、avatarFileId 不動
+  }
+}
+
+/* 移除頭貼:avatarFileId→null → 清舊檔 → 回 initials */
+async function removeAvatar(removeBtn) {
+  const myId = getMyId();
+  if (!myId) return;
+  const me = getMyMember();
+  const oldFileId = me ? (me.avatarFileId || null) : null;
+  if (!oldFileId) return;
+  removeBtn.disabled = true;
+  try {
+    await updateDoc(doc(db, "members", myId), { avatarFileId: null });
+    if (me) me.avatarFileId = null;
+    applyMyIdentity();
+    renderAvatarSection();
+    deleteDriveFile(APPS_SCRIPT_URL, oldFileId).catch(() => {});
+    showToast("已移除頭貼");
+  } catch (e) {
+    console.warn("[avatar] 移除失敗:", e && e.message ? e.message : e);
+    showToast("移除失敗,等一下再試");
+    removeBtn.disabled = false;
+  }
+}
+
 function renderSettingsBody(body) {
   const me = getMyMember();
   // 改名(需認領;沒認領→提示)
@@ -621,7 +725,15 @@ function renderSettingsBody(body) {
       <textarea class="settings-textarea" id="settingsFeedback" maxlength="500" placeholder="想說的話、遇到的問題、想要的功能…"></textarea>
       <button class="settings-save-btn" id="settingsFeedbackSend" disabled>送出</button>
     </div>`;
-  body.innerHTML = renameHtml + fontHtml + fbHtml;
+  // 頭貼(放改名下面、同屬身分;未認領顯示提示、不顯示上傳)
+  const avatarHtml = me
+    ? `<div class="settings-section" id="settingsAvatarSection"></div>`
+    : `<div class="settings-section">
+         <div class="settings-section__title">頭貼</div>
+         <p class="settings-hint">你還沒「選擇我的身分」,先認領才能設頭貼。</p>
+       </div>`;
+  body.innerHTML = renameHtml + avatarHtml + fontHtml + fbHtml;
+  if (me) renderAvatarSection();   // 填入頭貼預覽 + 鈕(只在已認領)
 
   // 改名 wiring
   if (me) {
